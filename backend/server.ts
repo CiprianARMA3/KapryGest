@@ -6,7 +6,7 @@ dotenvConfig({ path: path.resolve(__dirname, './db/security_keys/.env') });
 // -------------------- IMPORT DEPENDENCIES -------------------- //
 import express, { Request, Response } from 'express';
 import 'reflect-metadata';
-import { MikroORM } from '@mikro-orm/postgresql';
+import { EntityData, MikroORM } from '@mikro-orm/postgresql';
 import config from './admin-orm.config';
 import usersConfig from './users-orm.config';
 import { UserData } from './entities/admin-side/UserData';
@@ -185,19 +185,49 @@ async function ensureUserFolderStructure(userId: number) {
   }
 }
 
-// Update archive data.json with subordinate workers data
+// Update archive data.json with subordinate workers data - FIXED with proper types
 async function updateSubordinateWorkersArchive(userId: number) {
   try {
     const archiveDataPath = `/home/cipriankali/Desktop/KapryGest/backend/db/store/${userId}/archive/data.json`;
     
-    // Ensure folder structure exists first
     await ensureUserFolderStructure(userId);
 
     const usersOrm = await MikroORM.init(usersConfig);
-    const em = usersOrm.em.fork();
+    const conn = usersOrm.em.getConnection();
     
-    // Get all subordinate workers for this user
-    const workers = await em.find(SubordinateWorkers, {});
+    const tableName = `subordinateworkers_${userId}`;
+    
+    // Check if table exists first
+    const tableExists = await conn.execute<{ exists: boolean }[]>(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = ?
+      )`,
+      [tableName]
+    );
+    
+    interface SubordinateWorkerRow {
+      id: number;
+      name: string;
+      surname: string;
+      email: string;
+      phone_number: number;
+      role: string;
+      permissions?: any;
+      logs?: any;
+      created_at: Date;
+      user_id: number;
+      is_active: boolean;
+    }
+    
+    let workers: SubordinateWorkerRow[] = [];
+    if (tableExists[0].exists) {
+      const result = await conn.execute<SubordinateWorkerRow[]>(
+        `SELECT * FROM ${tableName} WHERE user_id = ?`,
+        [userId]
+      );
+      workers = result;
+    }
     
     await usersOrm.close();
 
@@ -246,7 +276,6 @@ async function updateSubordinateWorkersArchive(userId: number) {
     };
     archiveData.lastUpdated = new Date().toISOString();
 
-    // Write updated data to archive
     await fsPromises.writeFile(archiveDataPath, JSON.stringify(archiveData, null, 2));
     console.log(`✅ Updated subordinate workers archive for user ${userId}`);
 
@@ -428,16 +457,53 @@ app.get('/api/me', authenticateToken, checkSuspended, async (req: AuthenticatedR
 
 // -------------------- SUBORDINATE WORKERS ROUTES -------------------- //
 
-// Get all subordinate workers for current user
+// Get all subordinate workers for current user - FIXED parameter syntax
+// Get all subordinate workers for current user - FIXED with proper types
 app.get('/api/subordinate-workers', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'User not found' });
 
     const usersOrm = await MikroORM.init(usersConfig);
-    const em = usersOrm.em.fork();
+    const conn = usersOrm.em.getConnection();
     
-    const workers = await em.find(SubordinateWorkers, {});
+    const tableName = `subordinateworkers_${userId}`;
+    
+    // Check if table exists first
+    const tableExists = await conn.execute<{ exists: boolean }[]>(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = ?
+      )`,
+      [tableName]
+    );
+    
+    if (!tableExists[0].exists) {
+      await usersOrm.close();
+      return res.json([]);
+    }
+    
+    // Define the worker type
+    interface SubordinateWorker {
+      id: number;
+      name: string;
+      surname: string;
+      email: string;
+      phone_number: number;
+      role: string;
+      permissions?: any;
+      logs?: any;
+      created_at: Date;
+      is_active: boolean;
+    }
+    
+    // Query the correct table
+    const workers = await conn.execute<SubordinateWorker[]>(
+      `SELECT id, name, surname, email, phone_number, role, permissions, logs, created_at, is_active
+      FROM ${tableName} 
+      WHERE user_id = ? AND is_active = true`,
+      [userId]
+    );
     
     await usersOrm.close();
     
@@ -449,24 +515,59 @@ app.get('/api/subordinate-workers', authenticateToken, checkSuspended, async (re
 });
 
 // Get specific subordinate worker
+// Get specific subordinate worker - FIXED
+// Get specific subordinate worker - FIXED with proper types
 app.get('/api/subordinate-workers/:id', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const workerId = Number(req.params.id);
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
 
     const usersOrm = await MikroORM.init(usersConfig);
-    const em = usersOrm.em.fork();
+    const conn = usersOrm.em.getConnection();
     
-    const worker = await em.findOne(SubordinateWorkers, { 
-      id: workerId
-    });
+    const tableName = `subordinateworkers_${userId}`;
     
-    await usersOrm.close();
+    // Check if table exists first
+    const tableExists = await conn.execute<{ exists: boolean }[]>(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = ?
+      )`,
+      [tableName]
+    );
     
-    if (!worker) {
+    if (!tableExists[0].exists) {
+      await usersOrm.close();
       return res.status(404).json({ error: 'Subordinate worker not found' });
     }
     
-    res.json(worker);
+    interface SubordinateWorker {
+      id: number;
+      name: string;
+      surname: string;
+      email: string;
+      phone_number: number;
+      role: string;
+      permissions?: any;
+      logs?: any;
+      created_at: Date;
+      is_active: boolean;
+    }
+    
+    const workers = await conn.execute<SubordinateWorker[]>(
+      `SELECT * FROM ${tableName} 
+      WHERE id = ? AND user_id = ? AND is_active = true`,
+      [workerId, userId]
+    );
+    
+    await usersOrm.close();
+    
+    if (workers.length === 0) {
+      return res.status(404).json({ error: 'Subordinate worker not found' });
+    }
+    
+    res.json(workers[0]);
   } catch (err) {
     console.error('Get subordinate worker error:', err);
     res.status(500).json({ error: 'Failed to fetch subordinate worker' });
@@ -476,6 +577,9 @@ app.get('/api/subordinate-workers/:id', authenticateToken, checkSuspended, async
 // Create new subordinate worker
 app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
+
     const { name, surname, email, phone_number, role, password, permissions } = req.body;
     
     // Validation
@@ -486,50 +590,86 @@ app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (r
     }
 
     const usersOrm = await MikroORM.init(usersConfig);
-    const em = usersOrm.em.fork();
+    const conn = usersOrm.em.getConnection();
     
-    // Check if email already exists
-    const existingWorker = await em.findOne(SubordinateWorkers, { 
-      email
-    });
+    const tableName = `subordinateworkers_${userId}`;
     
-    if (existingWorker) {
+    // Check if table exists - FIXED
+    const tableExists = await conn.execute(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = ?
+      )`,
+      [tableName]
+    );
+    
+    if (!tableExists[0].exists) {
+      // Create the table if it doesn't exist
+      await conn.execute(`
+        CREATE TABLE ${tableName} (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(100) NOT NULL,
+          surname VARCHAR(100) NOT NULL,
+          email VARCHAR(256) NOT NULL,
+          phone_number BIGINT NOT NULL,
+          role VARCHAR(100) NOT NULL,
+          password VARCHAR(256) NOT NULL,
+          permissions JSONB,
+          logs JSONB,
+          user_id INTEGER NOT NULL,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(email, user_id)
+        );
+      `);
+    }
+    
+    // Check if email already exists - FIXED
+    const existingWorker = await conn.execute(
+      `SELECT id FROM ${tableName} WHERE email = ? AND user_id = ?`,
+      [email, userId]
+    );
+    
+    if (existingWorker.length > 0) {
       await usersOrm.close();
       return res.status(400).json({ error: 'Email already exists for subordinate worker' });
     }
 
-    const newWorker = em.create(SubordinateWorkers, {
-      name,
-      surname,
-      email,
-      phone_number,
-      role,
-      password, // Add password field
-      permissions: permissions || {},
-      logs: {},
-      created_at: new Date()
-    });
+    // Insert new worker - FIXED (use ? for all parameters)
+    const result = await conn.execute(
+      `INSERT INTO ${tableName} 
+      (name, surname, email, phone_number, role, password, permissions, logs, user_id, is_active, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING *`,
+      [
+        name, surname, email, phone_number, role, password, 
+        permissions || {}, 
+        JSON.stringify([]), 
+        userId, 
+        true, 
+        new Date()
+      ]
+    );
 
-    await em.persistAndFlush(newWorker);
     await usersOrm.close();
 
-    // Update archive data.json with new subordinate worker
+    // Update archive data.json
     try {
-      await updateSubordinateWorkersArchive(req.user!.id);
+      await updateSubordinateWorkersArchive(userId);
     } catch (archiveErr) {
       console.error('Warning: Could not update archive data:', archiveErr);
-      // Continue even if archive update fails
     }
     
     res.status(201).json({
       message: 'Subordinate worker created successfully',
-      worker: newWorker
+      worker: result[0]
     });
   } catch (err) {
     console.error('Create subordinate worker error:', err);
     res.status(500).json({ error: 'Failed to create subordinate worker' });
   }
 });
+
 
 // Update subordinate worker
 app.put('/api/subordinate-workers/:id', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
@@ -1165,13 +1305,48 @@ app.get("/admin/tenant/:id/:table/columns", authenticateToken, isAdmin, async (r
 });
 
 // Admin: Get all subordinate workers for a specific user
+// Admin: Get all subordinate workers for a specific user - FIXED
+// Admin: Get all subordinate workers for a specific user - FIXED with proper types
 app.get("/admin/users/:id/subordinate-workers", authenticateToken, isAdmin, async (req: Request, res: Response) => {
   try {
     const userId = Number(req.params.id);
     const usersOrm = await MikroORM.init(usersConfig);
-    const em = usersOrm.em.fork();
+    const conn = usersOrm.em.getConnection();
     
-    const workers = await em.find(SubordinateWorkers, {});
+    const tableName = `subordinateworkers_${userId}`;
+    
+    // Check if table exists first
+    const tableExists = await conn.execute<{ exists: boolean }[]>(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = ?
+      )`,
+      [tableName]
+    );
+    
+    interface SubordinateWorker {
+      id: number;
+      name: string;
+      surname: string;
+      email: string;
+      phone_number: number;
+      role: string;
+      permissions?: any;
+      logs?: any;
+      created_at: Date;
+      is_active: boolean;
+    }
+    
+    let workers: SubordinateWorker[] = [];
+    if (tableExists[0].exists) {
+      const result = await conn.execute<SubordinateWorker[]>(
+        `SELECT id, name, surname, email, phone_number, role, permissions, logs, created_at, is_active
+        FROM ${tableName} 
+        WHERE user_id = ?`,
+        [userId]
+      );
+      workers = result;
+    }
     
     await usersOrm.close();
     
