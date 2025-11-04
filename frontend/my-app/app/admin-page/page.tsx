@@ -28,6 +28,19 @@ interface FileItem {
   children: FileItem[];
 }
 
+interface SubordinateWorker {
+  id: number;
+  name: string;
+  surname: string;
+  email: string;
+  phone_number: number;
+  role: string;
+  password: string;
+  permissions?: object;
+  logs?: object;
+  created_at: string;
+}
+
 export default function AdminPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -53,6 +66,11 @@ export default function AdminPage() {
   const [selectedAction, setSelectedAction] = useState<{ type: 'suspend' | 'unsuspend' | 'delete', userId: number, userName: string } | null>(null);
   const [performingAction, setPerformingAction] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Subordinate Workers states
+  const [subordinateWorkers, setSubordinateWorkers] = useState<SubordinateWorker[]>([]);
+  const [showSubordinateWorkers, setShowSubordinateWorkers] = useState(false);
+  const [loadingSubordinates, setLoadingSubordinates] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -102,6 +120,8 @@ export default function AdminPage() {
     setTenantColumns({});
     setExpandedFolders(new Set());
     setLoadingFiles(true);
+    setSubordinateWorkers([]);
+    setShowSubordinateWorkers(false);
 
     // Fetch store files
     fetch(`${API_URL}/admin/store/${selectedUserId}`, { credentials: "include" })
@@ -118,8 +138,8 @@ export default function AdminPage() {
         setLoadingFiles(false);
       });
 
-    // Fetch tenant tables
-    const tables = ["customers", "orders", "products", "stocks", "invoices", "paymentlogs"];
+    // Fetch tenant tables - INCLUDING SUBORDINATE WORKERS
+    const tables = ["customers", "orders", "products", "stocks", "invoices", "paymentlogs", "subordinateworkers"];
     tables.forEach(table => {
       fetch(`${API_URL}/admin/tenant/${selectedUserId}/${table}`, { credentials: "include" })
         .then(res => res.ok ? res.json() : Promise.reject(`Failed ${table}`))
@@ -141,6 +161,29 @@ export default function AdminPage() {
         });
     });
   }, [selectedUserId, API_URL]);
+
+  // Fetch subordinate workers for selected user
+  const fetchSubordinateWorkers = async () => {
+    if (!selectedUserId) return;
+    
+    setLoadingSubordinates(true);
+    try {
+      const response = await fetch(`${API_URL}/admin/users/${selectedUserId}/subordinate-workers`, {
+        credentials: "include"
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch subordinate workers');
+      
+      const workers = await response.json();
+      setSubordinateWorkers(workers);
+      setShowSubordinateWorkers(true);
+    } catch (error) {
+      console.error('Error fetching subordinate workers:', error);
+      alert('Failed to load subordinate workers');
+    } finally {
+      setLoadingSubordinates(false);
+    }
+  };
 
   // Toggle folder expansion
   const toggleFolder = (folderPath: string) => {
@@ -171,97 +214,70 @@ export default function AdminPage() {
   };
 
   const performUserAction = async () => {
-  if (!selectedAction || !actionPassword.trim()) return;
+    if (!selectedAction || !actionPassword.trim()) return;
 
-  setPerformingAction(true);
-  setActionError(null);
-  
-  try {
-    let url = '';
-    let method = 'POST';
+    setPerformingAction(true);
+    setActionError(null);
+    
+    try {
+      let url = '';
+      let method = 'POST';
 
-    if (selectedAction.type === 'delete') {
-      url = `${API_URL}/admin/users/${selectedAction.userId}`;
-      method = 'DELETE';
-    } else if (selectedAction.type === 'suspend') {
-      url = `${API_URL}/admin/users/${selectedAction.userId}/suspend`;
-    } else if (selectedAction.type === 'unsuspend') {
-      url = `${API_URL}/admin/users/${selectedAction.userId}/unsuspend`;
-    }
-
-    console.log(`🔄 Performing ${selectedAction.type} on user ${selectedAction.userId}`);
-    console.log('Request details:', { url, method, password: actionPassword });
-
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: "include",
-      body: JSON.stringify({ password: actionPassword }),
-    });
-
-    console.log('Response status:', response.status);
-    console.log('Response ok:', response.ok);
-
-    if (!response.ok) {
-      let errorMessage = 'Action failed';
-      let errorDetails = null;
-      
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
-        errorDetails = errorData;
-      } catch (jsonError) {
-        // If JSON parsing fails, try to get text
-        try {
-          const errorText = await response.text();
-          errorMessage = errorText || `HTTP error! status: ${response.status}`;
-        } catch (textError) {
-          errorMessage = `HTTP error! status: ${response.status}`;
-        }
+      if (selectedAction.type === 'delete') {
+        url = `${API_URL}/admin/users/${selectedAction.userId}`;
+        method = 'DELETE';
+      } else if (selectedAction.type === 'suspend') {
+        url = `${API_URL}/admin/users/${selectedAction.userId}/suspend`;
+      } else if (selectedAction.type === 'unsuspend') {
+        url = `${API_URL}/admin/users/${selectedAction.userId}/unsuspend`;
       }
-      
-      console.error('Server error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        message: errorMessage,
-        details: errorDetails
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: "include",
+        body: JSON.stringify({ password: actionPassword }),
       });
+
+      if (!response.ok) {
+        let errorMessage = 'Action failed';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+        } catch (jsonError) {
+          try {
+            const errorText = await response.text();
+            errorMessage = errorText || `HTTP error! status: ${response.status}`;
+          } catch (textError) {
+            errorMessage = `HTTP error! status: ${response.status}`;
+          }
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      alert(result.message || `${selectedAction.type} action completed successfully`);
       
-      throw new Error(errorMessage);
-    }
+      // Refresh users list
+      const usersResponse = await fetch(`${API_URL}/users`, { credentials: "include" });
+      if (usersResponse.ok) {
+        const users = await usersResponse.json();
+        setAllUsers(users);
+        setFilteredUsers(users);
+      }
 
-    const result = await response.json();
-    console.log('Success response:', result);
-    
-    // Show success message
-    alert(result.message || `${selectedAction.type} action completed successfully`);
-    
-    // Refresh users list
-    console.log('Refreshing users list...');
-    const usersResponse = await fetch(`${API_URL}/users`, { credentials: "include" });
-    if (usersResponse.ok) {
-      const users = await usersResponse.json();
-      setAllUsers(users);
-      setFilteredUsers(users);
-      console.log('Users list refreshed successfully');
-    } else {
-      console.error('Failed to refresh users list');
+      closeActionModal();
+    } catch (error) {
+      console.error('User action error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Action failed';
+      setActionError(errorMessage);
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setPerformingAction(false);
     }
-
-    closeActionModal();
-  } catch (error) {
-    console.error('User action error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Action failed';
-    setActionError(errorMessage);
-    
-    // Also show alert for immediate feedback
-    alert(`Error: ${errorMessage}`);
-  } finally {
-    setPerformingAction(false);
-  }
-};
+  };
 
   // Export everything as ZIP
   const exportEverything = async () => {
@@ -483,6 +499,14 @@ export default function AdminPage() {
     }, 0);
   };
 
+  // Format JSON for display
+  const formatJSON = (data: any): string => {
+    if (typeof data === 'object' && data !== null) {
+      return JSON.stringify(data, null, 2);
+    }
+    return String(data);
+  };
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -607,10 +631,11 @@ export default function AdminPage() {
           </div>
         </div>
       )}
-    <img src="logo-withoutbackground.png" className="w-60 mb-[-80px] mt-[-100px]"/>
+
+      <img src="logo-withoutbackground.png" className="w-60 mb-[-80px] mt-[-100px]"/>
+      
       {/* Header */}
       <div className="bg-white rounded-lg shadow p-6">
-        
         <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
         <p className="text-gray-600 mt-2">Welcome back, {currentUser.name}!</p>
       </div>
@@ -752,6 +777,13 @@ export default function AdminPage() {
                   {showTables ? 'Hide Tables' : 'Show Tables'}
                 </button>
                 <button
+                  onClick={fetchSubordinateWorkers}
+                  disabled={loadingSubordinates}
+                  className="px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-purple-400 transition-colors"
+                >
+                  {loadingSubordinates ? 'Loading...' : 'View Subordinate Workers'}
+                </button>
+                <button
                   onClick={exportEverything}
                   disabled={exporting}
                   className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-400 transition-colors flex items-center gap-2"
@@ -768,6 +800,63 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+
+          {/* Subordinate Workers Section */}
+          {showSubordinateWorkers && (
+            <div className="bg-white rounded-lg shadow">
+              <div className="px-6 py-4 border-b">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    Subordinate Workers ({subordinateWorkers.length})
+                  </h3>
+                  <button
+                    onClick={() => setShowSubordinateWorkers(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              <div className="p-6">
+                {subordinateWorkers.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Surname</th>
+                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {subordinateWorkers.map(worker => (
+                          <tr key={worker.id} className="hover:bg-gray-50">
+                            <td className="py-3 px-4 text-sm text-gray-900">{worker.id}</td>
+                            <td className="py-3 px-4 text-sm text-gray-900">{worker.name}</td>
+                            <td className="py-3 px-4 text-sm text-gray-900">{worker.surname}</td>
+                            <td className="py-3 px-4 text-sm text-gray-600">{worker.email}</td>
+                            <td className="py-3 px-4 text-sm text-gray-600">{worker.phone_number}</td>
+                            <td className="py-3 px-4 text-sm text-gray-600">{worker.role}</td>
+                            <td className="py-3 px-4 text-sm text-gray-500">
+                              {new Date(worker.created_at).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No subordinate workers found for this user
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Store Files */}
           {showTables && (
@@ -811,7 +900,9 @@ export default function AdminPage() {
                 {Object.keys(tenantData).map(tableName => (
                   <div key={tableName} className="border rounded-lg overflow-hidden">
                     <div className="bg-gray-50 px-4 py-3 border-b">
-                      <h4 className="font-semibold text-gray-800 capitalize">{tableName}</h4>
+                      <h4 className="font-semibold text-gray-800 capitalize">
+                        {tableName === "subordinateworkers" ? "Subordinate Workers" : tableName}
+                      </h4>
                       <p className="text-sm text-gray-600">
                         {tenantData[tableName]?.length || 0} rows, {tenantColumns[tableName]?.length || 0} columns
                       </p>
@@ -831,8 +922,16 @@ export default function AdminPage() {
                           {tenantData[tableName]?.length > 0 ? tenantData[tableName].map((row, idx) => (
                             <tr key={idx} className="hover:bg-gray-50 transition-colors">
                               {tenantColumns[tableName]?.map((col, i) => (
-                                <td key={i} className="py-2 px-4 text-sm text-gray-900 max-w-xs truncate">
-                                  {row[col] !== null && row[col] !== undefined ? String(row[col]) : 'NULL'}
+                                <td key={i} className="py-2 px-4 text-sm text-gray-900 max-w-xs">
+                                  {row[col] !== null && row[col] !== undefined ? (
+                                    typeof row[col] === 'object' ? (
+                                      <pre className="text-xs text-gray-600 whitespace-pre-wrap">
+                                        {formatJSON(row[col])}
+                                      </pre>
+                                    ) : (
+                                      String(row[col])
+                                    )
+                                  ) : 'NULL'}
                                 </td>
                               ))}
                             </tr>

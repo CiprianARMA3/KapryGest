@@ -1,0 +1,134 @@
+{
+  "userId": 5,
+  "createdAt": "2025-11-03T20:07:46.596Z",
+  "subordinateWorkers": {
+    "totalCount": 0,
+    "activeWorkers": [],
+    "archivedWorkers": [
+      {
+    "id": 1,
+    "name": "Mario",
+    "surname": "Rossi",
+    "email": "mario.rossi@company.com",
+    "phone_number": "3331234567",
+    "role": "Sales Manager",
+    "password": "hashed_password_123",
+    "permissions": {
+      "can_manage_products": true,
+      "can_view_reports": true,
+      "can_process_orders": true,
+      "can_manage_customers": true,
+      "can_edit_prices": false
+    },
+    "logs": [
+      {
+        "timestamp": "2024-01-15T09:30:00Z",
+        "action": "login",
+        "details": "User logged in successfully"
+      },
+      {
+        "timestamp": "2024-01-15T11:15:00Z",
+        "action": "order_processed",
+        "details": "Processed order #10025"
+      }
+    ],
+    "created_at": "2024-01-10T08:00:00Z"
+  },
+  {
+    "id": 2,
+    "name": "Laura",
+    "surname": "Bianchi",
+    "email": "laura.bianchi@company.com",
+    "phone_number": "3349876543",
+    "role": "Inventory Specialist",
+    "password": "hashed_password_456",
+    "permissions": {
+      "can_manage_products": true,
+      "can_view_reports": true,
+      "can_process_orders": false,
+      "can_manage_customers": false,
+      "can_edit_prices": true
+    },
+    "logs": [
+      {
+        "timestamp": "2024-01-15T08:45:00Z",
+        "action": "login",
+        "details": "User logged in successfully"
+      },
+      {
+        "timestamp": "2024-01-15T10:20:00Z",
+        "action": "stock_updated",
+        "details": "Updated inventory for product SKU123"
+      }
+    ],
+    "created_at": "2024-01-12T09:15:00Z"
+  },
+  {
+    "id": 3,
+    "name": "Alessandro",
+    "surname": "Verdi",
+    "email": "alessandro.verdi@company.com",
+    "phone_number": "3355551234",
+    "role": "Customer Service",
+    "password": "hashed_password_789",
+    "permissions": {
+      "can_manage_products": false,
+      "can_view_reports": false,
+      "can_process_orders": true,
+      "can_manage_customers": true,
+      "can_edit_prices": false
+    },
+    "logs": [
+      {
+        "timestamp": "2024-01-15T09:00:00Z",
+        "action": "login",
+        "details": "User logged in successfully"
+      },
+      {
+        "timestamp": "2024-01-15T14:30:00Z",
+        "action": "customer_updated",
+        "details": "Updated customer profile for client C1001"
+      }
+    ],
+    "created_at": "2024-01-08T14:20:00Z"
+  },
+  {
+    "id": 4,
+    "name": "Giulia",
+    "surname": "Romano",
+    "email": "giulia.romano@company.com",
+    "phone_number": "3367890123",
+    "role": "Senior Sales",
+    "password": "hashed_password_101",
+    "permissions": {
+      "can_manage_products": true,
+      "can_view_reports": true,
+      "can_process_orders": true,
+      "can_manage_customers": true,
+      "can_edit_prices": true
+    },
+    "logs": [
+      {
+        "timestamp": "2024-01-15T08:30:00Z",
+        "action": "login",
+        "details": "User logged in successfully"
+      },
+      {
+        "timestamp": "2024-01-15T11:45:00Z",
+        "action": "order_processed",
+        "details": "Processed large order #10030 worth €2,500"
+      },
+      {
+        "timestamp": "2024-01-15T16:00:00Z",
+        "action": "price_override",
+        "details": "Applied discount to order #10030"
+      }
+    ],
+    "created_at": "2023-12-15T10:00:00Z"
+  }
+    ],
+    "permissionsHistory": [],
+    "activityLogs": []
+  },
+  "lastUpdated": "2025-11-03T20:07:46.596Z"
+}

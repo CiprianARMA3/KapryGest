@@ -1,6 +1,6 @@
 {
-  "userId": 4,
-  "createdAt": "2025-11-02T19:50:36.547Z",
+  "userId": "5",
+  "createdAt": "2025-11-03T19:51:58.438Z",
   "storeInfo": {
     "name": "",
     "address": "",
@@ -12,5 +12,5 @@
     "language": "en",
     "taxRate": 0
   },
-  "lastUpdated": "2025-11-02T19:50:36.547Z"
+  "lastUpdated": "2025-11-03T19:51:58.438Z"
 }
