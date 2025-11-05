@@ -22,6 +22,9 @@ import { createUserTenantTables } from './services/userServices';
 import { SubordinateWorkers } from './entities/user-side/SubordinateWorkers'; 
 import archiver from 'archiver'; 
 
+const BASE_STORE_PATH = '/home/cipriankali/Desktop/KapryGest/backend/db/store';
+
+
 // -------------------- INTERFACES -------------------- //
 interface AuthenticatedRequest extends Request {
   user?: { id: number; email: string };
@@ -118,7 +121,6 @@ async function ensureUserFolderStructure(userId: number) {
       { path: 'images-products', type: 'folder' },
       { path: 'invoices', type: 'folder' },
       { path: 'data.json', type: 'file' },
-      { path: 'archive/data.json', type: 'file' } // Add archive data.json
     ];
 
     for (const item of structure) {
@@ -185,146 +187,419 @@ async function ensureUserFolderStructure(userId: number) {
   }
 }
 
-// Update archive data.json with subordinate workers data - FIXED with proper types
-async function updateSubordinateWorkersArchive(userId: number) {
+// Update archive data.json with subordinate workers data - FIXED with proper types v1
+// Enhanced updateSubordinateWorkersArchive function v2
+// Enhanced updateSubordinateWorkersArchive function with detailed logging
+// FIXED VERSION - This should work
+// COMPLETE DEBUGGING VERSION
+async function updateSubordinateWorkersArchive(userId: number): Promise<any> {
   try {
+    console.log(`\n🔄 ARCHIVE UPDATE FOR USER ${userId}`);
+    
     const archiveDataPath = `/home/cipriankali/Desktop/KapryGest/backend/db/store/${userId}/archive/data.json`;
     
-    await ensureUserFolderStructure(userId);
+    // 1. Get data from database
+    const usersOrm = await MikroORM.init(usersConfig);
+    const conn = usersOrm.em.getConnection();
+    
+    const tableName = `subordinateworkers_${userId}`;
+    let workers: any[] = [];
+    
+    console.log(`📊 Querying table: ${tableName}`);
+    
+    try {
+      // Simple direct query
+      workers = await conn.execute(`SELECT * FROM ${tableName}`);
+      console.log(`✅ Database returned ${workers.length} workers`);
+      
+      // DEBUG: Log what we got
+      workers.forEach(worker => {
+        console.log(`   👤 ${worker.name} ${worker.surname} (ID: ${worker.id})`);
+      });
+      
+    } catch (err) {
+      console.log(`❌ Database query failed:`, err);
+      workers = [];
+    }
+    
+    await usersOrm.close();
 
+    // 2. Prepare archive data
+    const activeWorkers = workers.filter(worker => worker.is_active);
+    const archivedWorkers = workers.filter(worker => !worker.is_active);
+    
+    const archiveData = {
+      userId: userId,
+      createdAt: new Date().toISOString(),
+      subordinateWorkers: {
+        totalCount: workers.length,
+        activeWorkers: activeWorkers,
+        archivedWorkers: archivedWorkers,
+        permissionsHistory: [],
+        activityLogs: []
+      },
+      lastUpdated: new Date().toISOString()
+    };
+
+    console.log(`📁 Archive data: ${activeWorkers.length} active, ${archivedWorkers.length} archived`);
+
+    // 3. Write to file
+    await fsPromises.writeFile(archiveDataPath, JSON.stringify(archiveData, null, 2));
+    console.log(`✅ Archive file updated at: ${archiveDataPath}`);
+
+    return archiveData;
+
+  } catch (err) {
+    console.error(`💥 Archive update failed:`, err);
+    throw err;
+  }
+}
+
+
+//debug3
+
+app.post('/api/force-recreate-archive', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
+
+    const archiveDataPath = `/home/cipriankali/Desktop/KapryGest/backend/db/store/${userId}/archive/data.json`;
+    
+    console.log(`🗑️ Deleting existing archive file: ${archiveDataPath}`);
+    
+    // Delete the file if it exists
+    if (fs.existsSync(archiveDataPath)) {
+      await fsPromises.unlink(archiveDataPath);
+      console.log(`✅ Deleted archive file`);
+    } else {
+      console.log(`📄 Archive file doesn't exist, will create new one`);
+    }
+    
+    // Now call the archive update to create a fresh file
+    console.log(`🔄 Creating fresh archive file...`);
+    const result = await updateSubordinateWorkersArchive(userId);
+    
+    res.json({
+      message: 'Archive file recreated successfully',
+      result: {
+        workersCount: result.subordinateWorkers.totalCount,
+        activeWorkers: result.subordinateWorkers.activeWorkers.length,
+        archivedWorkers: result.subordinateWorkers.archivedWorkers.length
+      },
+      success: true
+    });
+  } catch (err) {
+    console.error('Force recreate archive error:', err);
+    res.status(500).json({ error: `Failed to recreate archive: ${err}` });
+  }
+});
+//debug2
+
+app.get('/api/debug-database-state', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
+
+    console.log(`🔍 CHECKING DATABASE STATE FOR USER ${userId}`);
+    
     const usersOrm = await MikroORM.init(usersConfig);
     const conn = usersOrm.em.getConnection();
     
     const tableName = `subordinateworkers_${userId}`;
     
-    // Check if table exists first
-    const tableExists = await conn.execute<{ exists: boolean }[]>(
-      `SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = ?
-      )`,
+    // Check if table exists
+    const tableExists = await conn.execute(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)`,
       [tableName]
     );
     
-    interface SubordinateWorkerRow {
-      id: number;
-      name: string;
-      surname: string;
-      email: string;
-      phone_number: number;
-      role: string;
-      permissions?: any;
-      logs?: any;
-      created_at: Date;
-      user_id: number;
-      is_active: boolean;
-    }
-    
-    let workers: SubordinateWorkerRow[] = [];
+    const result: any = {
+      userId,
+      tableName,
+      tableExists: tableExists[0].exists,
+      workers: []
+    };
+
     if (tableExists[0].exists) {
-      const result = await conn.execute<SubordinateWorkerRow[]>(
-        `SELECT * FROM ${tableName} WHERE user_id = ?`,
-        [userId]
-      );
-      workers = result;
+      // Get all workers from the table
+      const workers = await conn.execute(`SELECT * FROM ${tableName}`);
+      result.workers = workers;
+      result.workerCount = workers.length;
+      
+      console.log(`📊 Found ${workers.length} workers in table ${tableName}:`);
+      workers.forEach((worker: any, index: number) => {
+        console.log(`👤 Worker ${index + 1}:`, {
+          id: worker.id,
+          name: worker.name,
+          surname: worker.surname,
+          email: worker.email,
+          is_active: worker.is_active,
+          created_at: worker.created_at
+        });
+      });
+    } else {
+      console.log(`❌ Table ${tableName} does not exist`);
     }
-    
+
     await usersOrm.close();
 
-    // Prepare subordinate workers data for archive
-    const subordinateWorkersData = workers.map(worker => ({
-      id: worker.id,
-      name: worker.name,
-      surname: worker.surname,
-      email: worker.email,
-      phone_number: worker.phone_number,
-      role: worker.role,
-      permissions: worker.permissions || {},
-      logs: worker.logs || [],
-      created_at: worker.created_at,
-      lastUpdated: new Date().toISOString()
-    }));
+    res.json(result);
+  } catch (err) {
+    console.error('Database state check error:', err);
+    res.status(500).json({ error: 'Database state check failed', details: err });
+  }
+});
 
-    // Read existing archive data or create new structure
-    let archiveData: any;
-    if (fs.existsSync(archiveDataPath)) {
-      const existingData = await fsPromises.readFile(archiveDataPath, 'utf-8');
-      archiveData = JSON.parse(existingData);
-    } else {
-      archiveData = {
-        userId: userId,
-        createdAt: new Date().toISOString(),
-        subordinateWorkers: {
-          totalCount: 0,
-          activeWorkers: [],
-          archivedWorkers: [],
-          permissionsHistory: [],
-          activityLogs: []
-        },
-        lastUpdated: new Date().toISOString()
-      };
-    }
+// Add this comprehensive debug endpoint
+app.get('/api/debug-database-check', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
 
-    // Update archive data
-    archiveData.subordinateWorkers = {
-      totalCount: subordinateWorkersData.length,
-      activeWorkers: subordinateWorkersData,
-      archivedWorkers: archiveData.subordinateWorkers?.archivedWorkers || [],
-      permissionsHistory: archiveData.subordinateWorkers?.permissionsHistory || [],
-      activityLogs: archiveData.subordinateWorkers?.activityLogs || [],
-      lastSync: new Date().toISOString()
+    console.log(`🔍 COMPREHENSIVE DATABASE DEBUG FOR USER ${userId}`);
+    
+    const usersOrm = await MikroORM.init(usersConfig);
+    const conn = usersOrm.em.getConnection();
+    
+    const tableName = `subordinateworkers_${userId}`;
+    
+    // Check if table exists
+    const tableExists = await conn.execute(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)`,
+      [tableName]
+    );
+    
+    const result: any = {
+      userId,
+      tableName,
+      tableExists: tableExists[0].exists
     };
-    archiveData.lastUpdated = new Date().toISOString();
 
-    await fsPromises.writeFile(archiveDataPath, JSON.stringify(archiveData, null, 2));
-    console.log(`✅ Updated subordinate workers archive for user ${userId}`);
+    if (tableExists[0].exists) {
+      // Get table structure
+      const columns = await conn.execute(`
+        SELECT column_name, data_type, is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name = $1 
+        ORDER BY ordinal_position
+      `, [tableName]);
+      
+      result.tableStructure = columns;
 
-    return archiveData;
-  } catch (err) {
-    console.error('❌ Error updating subordinate workers archive:', err);
-    throw err;
-  }
-}
-
-// Get subordinate workers archive data
-async function getSubordinateWorkersArchive(userId: number) {
-  try {
-    const archiveDataPath = `/home/cipriankali/Desktop/KapryGest/backend/db/store/${userId}/archive/data.json`;
-    
-    if (!fs.existsSync(archiveDataPath)) {
-      // If archive data.json doesn't exist, create it with current data
-      return await updateSubordinateWorkersArchive(userId);
+      // Get all data
+      const data = await conn.execute(`SELECT * FROM ${tableName}`);
+      result.data = data;
+      result.dataCount = data.length;
     }
 
-    const data = await fsPromises.readFile(archiveDataPath, 'utf-8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('❌ Error reading subordinate workers archive:', err);
-    throw err;
-  }
-}
+    await usersOrm.close();
 
-// Move a file into archive folder
-async function archiveUserDocument(userId: number, fileName: string) {
+    res.json(result);
+  } catch (err) {
+    console.error('Database debug error:', err);
+    res.status(500).json({ error: 'Database debug failed', details: err });
+  }
+});
+
+//debug
+// Check the actual file content on disk
+app.get('/api/debug-archive-content', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Ensure folder structure exists first
-    await ensureUserFolderStructure(userId);
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
 
-    const userFolder = `/home/cipriankali/Desktop/KapryGest/backend/db/store/${userId}`;
-    const archiveFolder = path.join(userFolder, 'archive');
-
-    const srcPath = path.join(userFolder, fileName);
-    const destPath = path.join(archiveFolder, fileName);
-
-    if (!fs.existsSync(srcPath)) throw new Error('File does not exist');
+    const archiveDataPath = `${BASE_STORE_PATH}/${userId}/archive/data.json`;
     
-    await fsPromises.rename(srcPath, destPath);
-    console.log(`✅ Archived file: ${fileName} for user ${userId}`);
+    let fileExists = false;
+    let content = null;
+    
+    try {
+      await fsPromises.access(archiveDataPath);
+      fileExists = true;
+      const fileContent = await fsPromises.readFile(archiveDataPath, 'utf-8');
+      content = JSON.parse(fileContent);
+    } catch (err) {
+      fileExists = false;
+      content = { error: `File not accessible: ${err}` };
+    }
+
+    res.json({
+      userId,
+      archivePath: archiveDataPath,
+      fileExists,
+      content,
+      currentTime: new Date().toISOString()
+    });
   } catch (err) {
-    console.error('❌ Error archiving document:', err);
-    throw err;
+    console.error('Debug archive content error:', err);
+    res.status(500).json({ error: 'Failed to check archive content' });
   }
-}
+});
+
+app.get('/api/debug-database-content', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
+
+    console.log(`\n🔍 CHECKING DATABASE CONTENT FOR USER ${userId}`);
+    
+    const usersOrm = await MikroORM.init(usersConfig);
+    const conn = usersOrm.em.getConnection();
+    
+    const tableName = `subordinateworkers_${userId}`;
+    
+    // 1. Check if table exists
+    const tableExists = await conn.execute(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)`,
+      [tableName]
+    );
+    
+    const result: any = {
+      userId,
+      tableName,
+      tableExists: tableExists[0].exists,
+      workers: []
+    };
+
+    if (tableExists[0].exists) {
+      console.log(`✅ Table ${tableName} EXISTS`);
+      
+      // 2. Get table structure
+      const columns = await conn.execute(`
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_name = $1 
+        ORDER BY ordinal_position
+      `, [tableName]);
+      
+      result.tableStructure = columns;
+      console.log(`📋 Table structure:`, columns);
+
+      // 3. Get ALL data from the table
+      try {
+        const workers = await conn.execute(`SELECT * FROM ${tableName}`);
+        result.workers = workers;
+        result.workerCount = workers.length;
+        
+        console.log(`📊 FOUND ${workers.length} WORKERS IN DATABASE:`);
+        
+        if (workers.length > 0) {
+          workers.forEach((worker: any, index: number) => {
+            console.log(`👤 Worker ${index + 1}:`, {
+              id: worker.id,
+              name: worker.name,
+              surname: worker.surname, 
+              email: worker.email,
+              phone_number: worker.phone_number,
+              role: worker.role,
+              is_active: worker.is_active,
+              created_at: worker.created_at
+            });
+          });
+        } else {
+          console.log(`❌ TABLE EXISTS BUT IS EMPTY!`);
+        }
+        
+      } catch (queryErr) {
+        console.error(`❌ QUERY FAILED:`, queryErr);
+        result.queryError = queryErr;
+      }
+      
+    } else {
+      console.log(`❌ TABLE ${tableName} DOES NOT EXIST!`);
+    }
+
+    await usersOrm.close();
+
+    res.json(result);
+  } catch (err) {
+    console.error('Database content check error:', err);
+    res.status(500).json({ error: 'Database content check failed', details: err });
+  }
+});
+
+
+// //debug
+// // Add this debug endpoint to test the archive function directly
+// app.post('/api/debug-test-archive', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+//   try {
+//     const userId = req.user?.id;
+//     if (!userId) return res.status(401).json({ error: 'User not found' });
+
+//     console.log(`🧪 DEBUG: Testing archive function for user ${userId}`);
+    
+//     // Test the archive function directly
+//     const result = await updateSubordinateWorkersArchive(userId);
+    
+//     res.json({
+//       message: 'Archive test completed',
+//       result: result,
+//       success: true
+//     });
+//   } catch (err) {
+//     console.error('Debug archive test error:', err);
+//     res.status(500).json({ error: `Archive test failed: ${err}` });
+//   }
+// });
+
+// // Helper function to create new archive structure
+// function createNewArchiveStructure(userId: number): any {
+//   return {
+//     userId: userId,
+//     createdAt: new Date().toISOString(),
+//     subordinateWorkers: {
+//       totalCount: 0,
+//       activeCount: 0,
+//       archivedCount: 0,
+//       activeWorkers: [],
+//       archivedWorkers: [],
+//       permissionsHistory: [],
+//       activityLogs: []
+//     },
+//     lastUpdated: new Date().toISOString(),
+//     syncCount: 0
+//   };
+// }
+// // Get subordinate workers archive data
+// async function getSubordinateWorkersArchive(userId: number) {
+//   try {
+//     const archiveDataPath = `${BASE_STORE_PATH}/${userId}/archive/data.json`;
+    
+//     if (!fs.existsSync(archiveDataPath)) {
+//       // If archive data.json doesn't exist, create it with current data
+//       return await updateSubordinateWorkersArchive(userId);
+//     }
+
+//     const data = await fsPromises.readFile(archiveDataPath, 'utf-8');
+//     return JSON.parse(data);
+//   } catch (err) {
+//     console.error('❌ Error reading subordinate workers archive:', err);
+//     throw err;
+//   }
+// }
+
+
+// // Move a file into archive folder
+// async function archiveUserDocument(userId: number, fileName: string) {
+//   try {
+//     // Ensure folder structure exists first
+//     await ensureUserFolderStructure(userId);
+
+//     const userFolder = `/home/cipriankali/Desktop/KapryGest/backend/db/store/${userId}`;
+//     const archiveFolder = path.join(userFolder, 'archive');
+
+//     const srcPath = path.join(userFolder, fileName);
+//     const destPath = path.join(archiveFolder, fileName);
+
+//     if (!fs.existsSync(srcPath)) throw new Error('File does not exist');
+    
+//     await fsPromises.rename(srcPath, destPath);
+//     console.log(`✅ Archived file: ${fileName} for user ${userId}`);
+//   } catch (err) {
+//     console.error('❌ Error archiving document:', err);
+//     throw err;
+//   }
+// }
 
 // -------------------- USER ROUTES -------------------- //
 // Register user
@@ -574,7 +849,7 @@ app.get('/api/subordinate-workers/:id', authenticateToken, checkSuspended, async
   }
 });
 
-// Create new subordinate worker
+// Create new subordinate worker - with auto archive update
 app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -594,8 +869,8 @@ app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (r
     
     const tableName = `subordinateworkers_${userId}`;
     
-    // Check if table exists - FIXED
-    const tableExists = await conn.execute(
+    // Check if table exists, create if not
+    const tableExists = await conn.execute<{ exists: boolean }[]>(
       `SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_name = ?
@@ -604,7 +879,6 @@ app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (r
     );
     
     if (!tableExists[0].exists) {
-      // Create the table if it doesn't exist
       await conn.execute(`
         CREATE TABLE ${tableName} (
           id SERIAL PRIMARY KEY,
@@ -624,7 +898,7 @@ app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (r
       `);
     }
     
-    // Check if email already exists - FIXED
+    // Check if email already exists
     const existingWorker = await conn.execute(
       `SELECT id FROM ${tableName} WHERE email = ? AND user_id = ?`,
       [email, userId]
@@ -635,7 +909,7 @@ app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (r
       return res.status(400).json({ error: 'Email already exists for subordinate worker' });
     }
 
-    // Insert new worker - FIXED (use ? for all parameters)
+    // Insert new worker
     const result = await conn.execute(
       `INSERT INTO ${tableName} 
       (name, surname, email, phone_number, role, password, permissions, logs, user_id, is_active, created_at)
@@ -653,12 +927,8 @@ app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (r
 
     await usersOrm.close();
 
-    // Update archive data.json
-    try {
-      await updateSubordinateWorkersArchive(userId);
-    } catch (archiveErr) {
-      console.error('Warning: Could not update archive data:', archiveErr);
-    }
+    // AUTO UPDATE ARCHIVE - This is the key part!
+    await updateSubordinateWorkersArchive(userId);
     
     res.status(201).json({
       message: 'Subordinate worker created successfully',
@@ -671,58 +941,79 @@ app.post('/api/subordinate-workers', authenticateToken, checkSuspended, async (r
 });
 
 
-// Update subordinate worker
+// Update subordinate worker - REMOVED archive update
 app.put('/api/subordinate-workers/:id', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const workerId = Number(req.params.id);
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
 
     const usersOrm = await MikroORM.init(usersConfig);
-    const em = usersOrm.em.fork();
+    const conn = usersOrm.em.getConnection();
     
-    const worker = await em.findOne(SubordinateWorkers, { 
-      id: workerId
-    });
+    const tableName = `subordinateworkers_${userId}`;
     
-    if (!worker) {
+    // Check if worker exists
+    const existingWorker = await conn.execute(
+      `SELECT * FROM ${tableName} WHERE id = ? AND user_id = ?`,
+      [workerId, userId]
+    );
+    
+    if (existingWorker.length === 0) {
       await usersOrm.close();
       return res.status(404).json({ error: 'Subordinate worker not found' });
     }
 
     const { name, surname, email, phone_number, role, password, permissions } = req.body;
     
-    // Update fields if provided
-    if (name) worker.name = name;
-    if (surname) worker.surname = surname;
-    if (email) worker.email = email;
-    if (phone_number) worker.phone_number = phone_number;
-    if (role) worker.role = role;
-    if (password) worker.password = password;
-    if (permissions) worker.permissions = permissions;
+    // Build update query
+    const updates: string[] = [];
+    const values: any[] = [];
+    
+    if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+    if (surname !== undefined) { updates.push('surname = ?'); values.push(surname); }
+    if (email !== undefined) { updates.push('email = ?'); values.push(email); }
+    if (phone_number !== undefined) { updates.push('phone_number = ?'); values.push(phone_number); }
+    if (role !== undefined) { updates.push('role = ?'); values.push(role); }
+    if (password !== undefined) { updates.push('password = ?'); values.push(password); }
+    if (permissions !== undefined) { updates.push('permissions = ?'); values.push(permissions); }
 
     // Add update log
+    const currentLogs = existingWorker[0].logs || [];
     const updateLog = {
       timestamp: new Date().toISOString(),
       action: 'update',
       changes: req.body
     };
+    const updatedLogs = [...currentLogs, updateLog];
     
-    worker.logs = Array.isArray(worker.logs) 
-      ? [...worker.logs, updateLog] 
-      : [updateLog];
+    updates.push('logs = ?');
+    values.push(JSON.stringify(updatedLogs));
 
-    await em.persistAndFlush(worker);
+    // Add WHERE clause parameters
+    values.push(workerId);
+    values.push(userId);
+
+    if (updates.length === 0) {
+      await usersOrm.close();
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    const updateQuery = `
+      UPDATE ${tableName} 
+      SET ${updates.join(', ')} 
+      WHERE id = ? AND user_id = ?
+      RETURNING *
+    `;
+
+    const result = await conn.execute(updateQuery, values);
     await usersOrm.close();
 
-    // Update archive data.json
-    try {
-      await updateSubordinateWorkersArchive(req.user!.id);
-    } catch (archiveErr) {
-      console.error('Warning: Could not update archive data:', archiveErr);
-    }
+    // REMOVED: await updateSubordinateWorkersArchive(userId);
     
     res.json({
       message: 'Subordinate worker updated successfully',
-      worker
+      worker: result[0]
     });
   } catch (err) {
     console.error('Update subordinate worker error:', err);
@@ -730,32 +1021,40 @@ app.put('/api/subordinate-workers/:id', authenticateToken, checkSuspended, async
   }
 });
 
-// Delete subordinate worker
+// Delete subordinate worker - REMOVED archive update
 app.delete('/api/subordinate-workers/:id', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const workerId = Number(req.params.id);
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User not found' });
 
     const usersOrm = await MikroORM.init(usersConfig);
-    const em = usersOrm.em.fork();
+    const conn = usersOrm.em.getConnection();
     
-    const worker = await em.findOne(SubordinateWorkers, { 
-      id: workerId
-    });
+    const tableName = `subordinateworkers_${userId}`;
     
-    if (!worker) {
+    // Check if worker exists
+    const existingWorker = await conn.execute(
+      `SELECT * FROM ${tableName} WHERE id = ? AND user_id = ?`,
+      [workerId, userId]
+    );
+    
+    if (existingWorker.length === 0) {
       await usersOrm.close();
       return res.status(404).json({ error: 'Subordinate worker not found' });
     }
 
-    await em.removeAndFlush(worker);
+    // Soft delete by setting is_active to false
+    await conn.execute(
+      `UPDATE ${tableName} 
+      SET is_active = false 
+      WHERE id = ? AND user_id = ?`,
+      [workerId, userId]
+    );
+
     await usersOrm.close();
 
-    // Update archive data.json
-    try {
-      await updateSubordinateWorkersArchive(req.user!.id);
-    } catch (archiveErr) {
-      console.error('Warning: Could not update archive data:', archiveErr);
-    }
+    // REMOVED: await updateSubordinateWorkersArchive(userId);
     
     res.json({ message: 'Subordinate worker deleted successfully' });
   } catch (err) {
@@ -793,19 +1092,19 @@ app.get('/api/subordinate-workers/:id/logs', authenticateToken, checkSuspended, 
   }
 });
 
-// Get subordinate workers archive data
-app.get('/api/subordinate-workers-archive', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'User not found' });
-
-    const archiveData = await getSubordinateWorkersArchive(userId);
-    res.json(archiveData);
-  } catch (err) {
-    console.error('Get subordinate workers archive error:', err);
-    res.status(500).json({ error: 'Failed to fetch subordinate workers archive' });
-  }
-});
+// REMOVE THIS ENTIRE ENDPOINT - Get subordinate workers archive data
+// app.get('/api/subordinate-workers-archive', authenticateToken, checkSuspended, async (req: AuthenticatedRequest, res: Response) => {
+//   try {
+//     const userId = req.user?.id;
+//     if (!userId) return res.status(401).json({ error: 'User not found' });
+//
+//     const archiveData = await getSubordinateWorkersArchive(userId);
+//     res.json(archiveData);
+//   } catch (err) {
+//     console.error('Get subordinate workers archive error:', err);
+//     res.status(500).json({ error: 'Failed to fetch subordinate workers archive' });
+//   }
+// });
 
 // -------------------- ADMIN USER MANAGEMENT ROUTES -------------------- //
 
@@ -870,6 +1169,95 @@ app.post('/admin/users/:id/suspend', authenticateToken, isAdmin, async (req: Req
   } catch (err) {
     console.error('❌ Suspend user error:', err);
     res.status(500).json({ error: 'Failed to suspend user' });
+  }
+});
+
+// Admin: Create subordinate worker for specific user - with auto archive update
+app.post("/admin/users/:id/subordinate-workers", authenticateToken, isAdmin, async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.params.id);
+    const { name, surname, email, phone_number, role, password, permissions } = req.body;
+    
+    // Validation
+    if (!name || !surname || !email || !phone_number || !role || !password) {
+      return res.status(400).json({ 
+        error: 'Name, surname, email, phone_number, role, and password are required' 
+      });
+    }
+
+    const usersOrm = await MikroORM.init(usersConfig);
+    const conn = usersOrm.em.getConnection();
+    
+    const tableName = `subordinateworkers_${userId}`;
+    
+    // Check if table exists, create if not
+    const tableExists = await conn.execute<{ exists: boolean }[]>(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = ?
+      )`,
+      [tableName]
+    );
+    
+    if (!tableExists[0].exists) {
+      await conn.execute(`
+        CREATE TABLE ${tableName} (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(100) NOT NULL,
+          surname VARCHAR(100) NOT NULL,
+          email VARCHAR(256) NOT NULL,
+          phone_number BIGINT NOT NULL,
+          role VARCHAR(100) NOT NULL,
+          password VARCHAR(256) NOT NULL,
+          permissions JSONB,
+          logs JSONB,
+          user_id INTEGER NOT NULL,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(email, user_id)
+        );
+      `);
+    }
+    
+    // Check if email already exists
+    const existingWorker = await conn.execute(
+      `SELECT id FROM ${tableName} WHERE email = ? AND user_id = ?`,
+      [email, userId]
+    );
+    
+    if (existingWorker.length > 0) {
+      await usersOrm.close();
+      return res.status(400).json({ error: 'Email already exists for subordinate worker' });
+    }
+
+    // Insert new worker
+    const result = await conn.execute(
+      `INSERT INTO ${tableName} 
+      (name, surname, email, phone_number, role, password, permissions, logs, user_id, is_active, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING *`,
+      [
+        name, surname, email, phone_number, role, password, 
+        permissions || {}, 
+        JSON.stringify([]), 
+        userId, 
+        true, 
+        new Date()
+      ]
+    );
+
+    await usersOrm.close();
+
+    // AUTO UPDATE ARCHIVE
+    await updateSubordinateWorkersArchive(userId);
+    
+    res.status(201).json({
+      message: 'Subordinate worker created successfully',
+      worker: result[0]
+    });
+  } catch (err) {
+    console.error('Admin create subordinate worker error:', err);
+    res.status(500).json({ error: 'Failed to create subordinate worker' });
   }
 });
 
@@ -1358,17 +1746,17 @@ app.get("/admin/users/:id/subordinate-workers", authenticateToken, isAdmin, asyn
 });
 
 // Admin: Get subordinate workers archive data
-app.get("/admin/users/:id/subordinate-workers-archive", authenticateToken, isAdmin, async (req: Request, res: Response) => {
-  try {
-    const userId = Number(req.params.id);
+// app.get("/admin/users/:id/subordinate-workers-archive", authenticateToken, isAdmin, async (req: Request, res: Response) => {
+//   try {
+//     const userId = Number(req.params.id);
     
-    const archiveData = await getSubordinateWorkersArchive(userId);
-    res.json(archiveData);
-  } catch (err) {
-    console.error('Admin get subordinate workers archive error:', err);
-    res.status(500).json({ error: "Failed to fetch subordinate workers archive" });
-  }
-});
+//     const archiveData = await getSubordinateWorkersArchive(userId);
+//     res.json(archiveData);
+//   } catch (err) {
+//     console.error('Admin get subordinate workers archive error:', err);
+//     res.status(500).json({ error: "Failed to fetch subordinate workers archive" });
+//   }
+// });
 
 // -------------------- PAYMENT ROUTES -------------------- //
 app.post('/payments', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
@@ -1419,18 +1807,18 @@ app.get('/subscriptions', authenticateToken, async (req, res) => {
 });
 
 // -------------------- ARCHIVE DOCUMENT ENDPOINT -------------------- //
-app.post('/users/:id/archive', authenticateToken, async (req, res) => {
-  try {
-    const userId = Number(req.params.id);
-    const { fileName } = req.body;
-    if (!fileName) return res.status(400).json({ error: 'fileName is required' });
+// app.post('/users/:id/archive', authenticateToken, async (req, res) => {
+//   try {
+//     const userId = Number(req.params.id);
+//     const { fileName } = req.body;
+//     if (!fileName) return res.status(400).json({ error: 'fileName is required' });
 
-    await archiveUserDocument(userId, fileName);
-    res.json({ message: `File ${fileName} archived successfully for user ${userId}` });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to archive document' });
-  }
-});
+//     await archiveUserDocument(userId, fileName);
+//     res.json({ message: `File ${fileName} archived successfully for user ${userId}` });
+//   } catch (err) {
+//     res.status(500).json({ error: 'Failed to archive document' });
+//   }
+// });
 
 // -------------------- FOLDER MANAGEMENT ROUTES -------------------- //
 

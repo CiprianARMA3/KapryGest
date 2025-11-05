@@ -1,6 +1,6 @@
 {
   "userId": 5,
-  "createdAt": "2025-11-03T20:07:46.596Z",
+  "createdAt": "2025-11-05T14:41:20.107Z",
   "subordinateWorkers": {
     "totalCount": 0,
     "activeWorkers": [],
@@ -8,5 +8,5 @@
     "permissionsHistory": [],
     "activityLogs": []
   },
-  "lastUpdated": "2025-11-03T20:07:46.596Z"
+  "lastUpdated": "2025-11-05T14:41:20.107Z"
 }
