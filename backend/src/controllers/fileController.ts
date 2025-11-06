@@ -99,17 +99,24 @@ export class FileController {
         return res.status(400).json({ error: 'Path is not a file' });
       }
 
+      // Get file extension to determine content type
+      const ext = path.extname(filePath).toLowerCase();
+      const textExtensions = ['.txt', '.js', '.ts', '.json', '.xml', '.html', '.css', '.csv', '.log', '.md', '.yml', '.yaml'];
+      const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif'];
+      
+      // Handle image files
+      if (imageExtensions.includes(ext)) {
+        return FileController.previewImage(req, res);
+      }
+      
+      // Handle text files (existing logic)
+      if (!textExtensions.includes(ext)) {
+        return res.status(400).json({ error: 'File type not supported for preview' });
+      }
+
       // Check file size (limit to 5MB for preview)
       if (stats.size > 5 * 1024 * 1024) {
         return res.status(413).json({ error: 'File too large for preview (max 5MB)' });
-      }
-
-      // Get file extension to determine if it's text-based
-      const ext = path.extname(filePath).toLowerCase();
-      const textExtensions = ['.txt', '.js', '.ts', '.json', '.xml', '.html', '.css', '.csv', '.log', '.md', '.yml', '.yaml'];
-      
-      if (!textExtensions.includes(ext)) {
-        return res.status(400).json({ error: 'File type not supported for preview' });
       }
 
       // Read file content as text
@@ -119,12 +126,114 @@ export class FileController {
         name: fileName,
         content: content,
         size: stats.size,
-        type: ext
+        type: 'text'
       });
 
     } catch (err) {
       console.error('Preview error:', err);
       res.status(500).json({ error: 'Failed to preview file' });
+    }
+  }
+
+  static async previewImage(req: Request, res: Response) {
+    try {
+      const userId = Number(req.params.id);
+      const fileName = req.query.file as string;
+      
+      if (!fileName) {
+        return res.status(400).json({ error: 'File name is required' });
+      }
+
+      const storePath = `${BASE_STORE_PATH}/${userId}`;
+      const filePath = path.join(storePath, fileName);
+
+      // Security check - prevent directory traversal
+      if (!filePath.startsWith(storePath)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+
+      // Check if it's actually a file
+      const stats = fs.statSync(filePath);
+      if (!stats.isFile()) {
+        return res.status(400).json({ error: 'Path is not a file' });
+      }
+
+      // Check file size (limit to 10MB for images)
+      if (stats.size > 10 * 1024 * 1024) {
+        return res.status(413).json({ error: 'Image too large for preview (max 10MB)' });
+      }
+
+      // Get file extension and set appropriate content type
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeTypes: { [key: string]: string } = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.bmp': 'image/bmp',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+        '.tiff': 'image/tiff',
+        '.tif': 'image/tiff'
+      };
+
+      const mimeType = mimeTypes[ext] || 'image/jpeg';
+
+      // Set appropriate headers
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Length', stats.size);
+      res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+
+      // For direct image preview, stream the file
+      if (req.query.direct === 'true') {
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+      } else {
+        // For API response, return image metadata and base64 data
+        const imageBuffer = await fsPromises.readFile(filePath);
+        const base64Image = imageBuffer.toString('base64');
+        const dataUrl = `data:${mimeType};base64,${base64Image}`;
+        
+        res.json({
+          name: fileName,
+          type: 'image',
+          mimeType: mimeType,
+          size: stats.size,
+          data: dataUrl,
+          dimensions: await FileController.getImageDimensions(filePath, ext)
+        });
+      }
+
+    } catch (err) {
+      console.error('Image preview error:', err);
+      res.status(500).json({ error: 'Failed to preview image' });
+    }
+  }
+
+  private static async getImageDimensions(filePath: string, ext: string): Promise<{ width: number; height: number } | null> {
+    try {
+      // For SVG files, we need special handling
+      if (ext === '.svg') {
+        // SVG dimensions are complex to parse, return null for now
+        return null;
+      }
+
+      // For other image formats, we can use the image-size package
+      // You'll need to install it: npm install image-size
+      // const sizeOf = require('image-size');
+      // return sizeOf(filePath);
+
+      // Alternative: Return null and let frontend handle dimensions
+      // Or implement a simple version for common formats
+      return null;
+    } catch (err) {
+      console.error('Error getting image dimensions:', err);
+      return null;
     }
   }
 

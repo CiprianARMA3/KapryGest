@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 
 interface User {
+  active_subscription: any;
   id: number;
   name: string;
   surname: string;
@@ -17,6 +18,9 @@ interface FileContent {
   name: string;
   content: string;
   type: string;
+  mimeType?: string;
+  data?: string;
+  size?: number;
 }
 
 interface FileItem {
@@ -78,7 +82,6 @@ export default function AdminPage() {
   useEffect(() => {
     fetch(`${API_BASE}/auth/me`, { credentials: "include" })
       .then(res => {
-        // Check if response is JSON first
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
           throw new Error('Server returned HTML instead of JSON');
@@ -119,7 +122,8 @@ export default function AdminPage() {
       u.surname.toLowerCase().includes(lower) ||
       u.username.toLowerCase().includes(lower) ||
       u.email.toLowerCase().includes(lower) ||
-      u.phone_number.toLowerCase().includes(lower)
+      u.phone_number.toLowerCase().includes(lower) ||
+      (u.active_subscription ? 'active' : 'inactive').includes(lower)
     );
     setFilteredUsers(filtered);
   }, [search, allUsers]);
@@ -171,7 +175,6 @@ export default function AdminPage() {
           if (rows.length > 0) {
             setTenantColumns(prev => ({ ...prev, [table]: Object.keys(rows[0]) }));
           } else {
-            // If no rows, get columns from schema
             fetch(`${API_BASE}/admin/tenant/${selectedUserId}/${table}/columns`, { credentials: "include" })
               .then(res => res.json())
               .then((cols: string[]) => setTenantColumns(prev => ({ ...prev, [table]: cols })))
@@ -211,6 +214,40 @@ export default function AdminPage() {
     } finally {
       setLoadingSubordinates(false);
     }
+  };
+
+  // Helper function to get file icon
+  const getFileIcon = (fileName: string, isDirectory: boolean) => {
+    if (isDirectory) return '📁';
+    
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'];
+    
+    if (imageExtensions.includes(ext || '')) return '🖼️';
+    if (ext === 'pdf') return '📕';
+    if (ext === 'doc' || ext === 'docx') return '📄';
+    if (ext === 'xls' || ext === 'xlsx') return '📊';
+    if (ext === 'zip' || ext === 'rar') return '📦';
+    
+    return '📄';
+  };
+
+  // Helper to get file type text
+  const getFileTypeText = (fileName: string): string => {
+    const ext = fileName.split('.').pop()?.toLowerCase() || 'file';
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'];
+    
+    if (imageExtensions.includes(ext)) return 'Image';
+    if (ext === 'pdf') return 'PDF';
+    if (ext === 'doc' || ext === 'docx') return 'Document';
+    if (ext === 'xls' || ext === 'xlsx') return 'Spreadsheet';
+    if (ext === 'zip' || ext === 'rar') return 'Archive';
+    if (ext === 'txt' || ext === 'log') return 'Text File';
+    if (ext === 'js' || ext === 'ts') return 'JavaScript';
+    if (ext === 'json') return 'JSON';
+    if (ext === 'html' || ext === 'css') return '🌐 Web';
+    
+    return ext.toUpperCase();
   };
 
   // Toggle folder expansion
@@ -269,7 +306,6 @@ export default function AdminPage() {
         body: JSON.stringify({ password: actionPassword }),
       });
 
-      // Check if response is JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Server returned HTML instead of JSON');
@@ -294,7 +330,6 @@ export default function AdminPage() {
       const result = await response.json();
       alert(result.message || `${selectedAction.type} action completed successfully`);
       
-      // Refresh users list
       const usersResponse = await fetch(`${API_BASE}/users`, { credentials: "include" });
       if (usersResponse.ok) {
         const users = await usersResponse.json();
@@ -386,7 +421,6 @@ export default function AdminPage() {
         { credentials: "include" }
       );
 
-      // Check if response is JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Server returned HTML instead of JSON');
@@ -399,16 +433,37 @@ export default function AdminPage() {
 
       const fileData = await response.json();
       
-      setPreviewFile({
-        name: fileData.name,
-        content: fileData.content,
-        type: fileData.type
-      });
+      // Handle image files
+      if (fileData.type === 'image') {
+        setPreviewFile({
+          name: fileData.name,
+          content: '',
+          type: 'image',
+          mimeType: fileData.mimeType,
+          data: fileData.data,
+          size: fileData.size
+        });
+      } else {
+        // Handle text files
+        setPreviewFile({
+          name: fileData.name,
+          content: fileData.content,
+          type: fileData.type || 'text'
+        });
+      }
 
     } catch (error) {
       console.error('Preview error:', error);
       alert(error instanceof Error ? error.message : 'Failed to preview file');
     }
+  };
+
+  // Direct image preview in new tab
+  const previewImageDirect = (filePath: string) => {
+    if (!selectedUserId) return;
+    
+    const imageUrl = `${API_BASE}/files/admin/store/${selectedUserId}/preview?file=${encodeURIComponent(filePath)}&direct=true`;
+    window.open(imageUrl, '_blank');
   };
 
   // Close preview modal
@@ -464,7 +519,7 @@ export default function AdminPage() {
               <span className={`text-sm ${
                 item.isDirectory ? 'text-blue-600' : 'text-gray-600'
               }`}>
-                {item.isDirectory ? '📁' : '📄'}
+                {getFileIcon(item.name, item.isDirectory)}
               </span>
             </div>
             <div className="flex-1">
@@ -477,29 +532,42 @@ export default function AdminPage() {
                 {item.isDirectory ? (
                   `📂 FOLDER • ${item.children.length} items`
                 ) : (
-                  `${item.name.split('.').pop()?.toUpperCase() || 'FILE'} • ${formatFileSize(item.size)}`
+                  `${getFileTypeText(item.name)} • ${formatFileSize(item.size)}`
                 )}
               </div>
             </div>
           </div>
           
-          {item.isFile && (
-            <div className="flex space-x-2">
-              <button
-                onClick={() => previewFileContent(item.path)}
-                className="px-3 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
-              >
-                Preview
-              </button>
-              <button
-                onClick={() => downloadFile(item.path)}
-                disabled={downloadingFile === item.path}
-                className="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-400 transition-colors"
-              >
-                {downloadingFile === item.path ? 'Downloading...' : 'Download'}
-              </button>
-            </div>
+      {item.isFile && (
+        <div className="flex space-x-2">
+          {/* Show "View Image" for image files instead of Preview */}
+          {['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'].some(ext => 
+            item.name.toLowerCase().endsWith(ext)
+          ) ? (
+            <button
+              onClick={() => previewImageDirect(item.path)}
+              className="px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            >
+              View Image
+            </button>
+          ) : (
+            // Show Preview button for non-image files
+            <button
+              onClick={() => previewFileContent(item.path)}
+              className="px-3 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+            >
+              Preview
+            </button>
           )}
+          <button
+            onClick={() => downloadFile(item.path)}
+            disabled={downloadingFile === item.path}
+            className="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-400 transition-colors"
+          >
+            {downloadingFile === item.path ? 'Downloading...' : 'Download'}
+          </button>
+        </div>
+      )}
         </div>
         
         {/* Render children recursively for expanded directories */}
@@ -569,7 +637,14 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/10 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-xl">
             <div className="flex justify-between items-center p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">Preview: {previewFile.name}</h3>
+              <h3 className="text-lg font-semibold text-gray-800">
+                Preview: {previewFile.name}
+                {previewFile.type === 'image' && previewFile.size && (
+                  <span className="text-sm text-gray-500 ml-2">
+                    ({formatFileSize(previewFile.size)})
+                  </span>
+                )}
+              </h3>
               <button
                 onClick={closePreview}
                 className="text-gray-500 hover:text-gray-700 text-lg font-bold hover:bg-gray-100 rounded-full w-7 h-7 flex items-center justify-center transition-colors"
@@ -577,11 +652,48 @@ export default function AdminPage() {
                 ✕
               </button>
             </div>
-            <div className="flex-1 overflow-auto">
-              <pre className="whitespace-pre-wrap p-6 text-sm overflow-auto h-full font-mono">
-                {previewFile.content}
-              </pre>
+            
+            <div className="flex-1 overflow-auto p-4">
+              {previewFile.type === 'image' ? (
+                // Image preview
+                <div className="flex items-center justify-center h-full">
+                  {previewFile.data ? (
+                    <div className="max-w-full max-h-full flex items-center justify-center">
+                      <img 
+                        src={previewFile.data} 
+                        alt={previewFile.name}
+                        className="max-w-full max-h-full object-contain"
+                        onError={(e) => {
+                          console.error('Failed to load image');
+                          const container = e.currentTarget.parentElement;
+                          if (container) {
+                            container.innerHTML = `
+                              <div class="text-center text-red-600 p-8">
+                                <div class="text-4xl mb-4">❌</div>
+                                <p>Failed to load image</p>
+                                <p class="text-sm text-gray-500 mt-2">The image may be corrupted or in an unsupported format</p>
+                              </div>
+                            `;
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500 p-8">
+                      <div className="text-4xl mb-4">🖼️</div>
+                      <p>Image data not available</p>
+                      <p className="text-sm text-gray-500 mt-2">Try downloading the file instead</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Text preview
+                <pre className="whitespace-pre-wrap p-6 text-sm overflow-auto h-full font-mono bg-gray-50 rounded-lg">
+                  {previewFile.content}
+                </pre>
+              )}
             </div>
+            
             <div className="p-4 border-t border-gray-200 flex justify-end space-x-2">
               <button
                 onClick={() => downloadFile(previewFile.name)}
@@ -718,6 +830,7 @@ export default function AdminPage() {
                 <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                 <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admin</th>
                 <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subscription</th>
                 <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -742,6 +855,13 @@ export default function AdminPage() {
                       u.suspended ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                     }`}>
                       {u.suspended ? "Suspended" : "Active"}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      u.active_subscription ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {u.active_subscription ? "Active" : "Inactive"}
                     </span>
                   </td>
                   <td className="py-3 px-4">
