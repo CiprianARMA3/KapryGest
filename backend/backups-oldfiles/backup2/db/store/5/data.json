@@ -1,0 +1,16 @@
+{
+  "userId": "5",
+  "createdAt": "2025-11-03T19:51:58.438Z",
+  "storeInfo": {
+    "name": "",
+    "address": "",
+    "phone": "",
+    "email": ""
+  },
+  "settings": {
+    "currency": "EUR",
+    "language": "en",
+    "taxRate": 0
+  },
+  "lastUpdated": "2025-11-03T19:51:58.438Z"
+}

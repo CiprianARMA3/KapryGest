@@ -72,30 +72,43 @@ export default function AdminPage() {
   const [showSubordinateWorkers, setShowSubordinateWorkers] = useState(false);
   const [loadingSubordinates, setLoadingSubordinates] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
   // Fetch current admin user
   useEffect(() => {
-    fetch(`${API_URL}/api/me`, { credentials: "include" })
-      .then(res => res.ok ? res.json() : Promise.reject("Not authorized"))
+    fetch(`${API_BASE}/auth/me`, { credentials: "include" })
+      .then(res => {
+        // Check if response is JSON first
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Server returned HTML instead of JSON');
+        }
+        return res.ok ? res.json() : Promise.reject("Not authorized");
+      })
       .then((user: User) => {
         if (!user.admin) window.location.href = "/main-page";
         else setCurrentUser(user);
       })
       .catch(() => window.location.href = "/login");
-  }, [API_URL]);
+  }, [API_BASE]);
 
   // Fetch all users
   useEffect(() => {
     if (!currentUser) return;
-    fetch(`${API_URL}/users`, { credentials: "include" })
-      .then(res => res.ok ? res.json() : Promise.reject("Failed to fetch users"))
+    fetch(`${API_BASE}/users`, { credentials: "include" })
+      .then(res => {
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Server returned HTML instead of JSON');
+        }
+        return res.ok ? res.json() : Promise.reject("Failed to fetch users");
+      })
       .then((users: User[]) => {
         setAllUsers(users);
         setFilteredUsers(users);
       })
       .catch(console.error);
-  }, [currentUser, API_URL]);
+  }, [currentUser, API_BASE]);
 
   // Filter users
   useEffect(() => {
@@ -124,8 +137,12 @@ export default function AdminPage() {
     setShowSubordinateWorkers(false);
 
     // Fetch store files
-    fetch(`${API_URL}/admin/store/${selectedUserId}`, { credentials: "include" })
+    fetch(`${API_BASE}/files/admin/store/${selectedUserId}`, { credentials: "include" })
       .then(res => {
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Server returned HTML instead of JSON');
+        }
         if (!res.ok) throw new Error('Failed to fetch store files');
         return res.json();
       })
@@ -141,15 +158,21 @@ export default function AdminPage() {
     // Fetch tenant tables - INCLUDING SUBORDINATE WORKERS
     const tables = ["customers", "orders", "products", "stocks", "invoices", "paymentlogs", "subordinateworkers"];
     tables.forEach(table => {
-      fetch(`${API_URL}/admin/tenant/${selectedUserId}/${table}`, { credentials: "include" })
-        .then(res => res.ok ? res.json() : Promise.reject(`Failed ${table}`))
+      fetch(`${API_BASE}/admin/tenant/${selectedUserId}/${table}`, { credentials: "include" })
+        .then(res => {
+          const contentType = res.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server returned HTML instead of JSON');
+          }
+          return res.ok ? res.json() : Promise.reject(`Failed ${table}`);
+        })
         .then((rows: any[]) => {
           setTenantData(prev => ({ ...prev, [table]: rows }));
           if (rows.length > 0) {
             setTenantColumns(prev => ({ ...prev, [table]: Object.keys(rows[0]) }));
           } else {
             // If no rows, get columns from schema
-            fetch(`${API_URL}/admin/tenant/${selectedUserId}/${table}/columns`, { credentials: "include" })
+            fetch(`${API_BASE}/admin/tenant/${selectedUserId}/${table}/columns`, { credentials: "include" })
               .then(res => res.json())
               .then((cols: string[]) => setTenantColumns(prev => ({ ...prev, [table]: cols })))
               .catch(console.error);
@@ -160,7 +183,7 @@ export default function AdminPage() {
           setTenantData(prev => ({ ...prev, [table]: [] }));
         });
     });
-  }, [selectedUserId, API_URL]);
+  }, [selectedUserId, API_BASE]);
 
   // Fetch subordinate workers for selected user
   const fetchSubordinateWorkers = async () => {
@@ -168,9 +191,14 @@ export default function AdminPage() {
     
     setLoadingSubordinates(true);
     try {
-      const response = await fetch(`${API_URL}/admin/users/${selectedUserId}/subordinate-workers`, {
+      const response = await fetch(`${API_BASE}/admin/users/${selectedUserId}/subordinate-workers`, {
         credentials: "include"
       });
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned HTML instead of JSON');
+      }
       
       if (!response.ok) throw new Error('Failed to fetch subordinate workers');
       
@@ -224,12 +252,12 @@ export default function AdminPage() {
       let method = 'POST';
 
       if (selectedAction.type === 'delete') {
-        url = `${API_URL}/admin/users/${selectedAction.userId}`;
+        url = `${API_BASE}/admin/users/${selectedAction.userId}`;
         method = 'DELETE';
       } else if (selectedAction.type === 'suspend') {
-        url = `${API_URL}/admin/users/${selectedAction.userId}/suspend`;
+        url = `${API_BASE}/admin/users/${selectedAction.userId}/suspend`;
       } else if (selectedAction.type === 'unsuspend') {
-        url = `${API_URL}/admin/users/${selectedAction.userId}/unsuspend`;
+        url = `${API_BASE}/admin/users/${selectedAction.userId}/unsuspend`;
       }
 
       const response = await fetch(url, {
@@ -240,6 +268,12 @@ export default function AdminPage() {
         credentials: "include",
         body: JSON.stringify({ password: actionPassword }),
       });
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned HTML instead of JSON');
+      }
 
       if (!response.ok) {
         let errorMessage = 'Action failed';
@@ -261,7 +295,7 @@ export default function AdminPage() {
       alert(result.message || `${selectedAction.type} action completed successfully`);
       
       // Refresh users list
-      const usersResponse = await fetch(`${API_URL}/users`, { credentials: "include" });
+      const usersResponse = await fetch(`${API_BASE}/users`, { credentials: "include" });
       if (usersResponse.ok) {
         const users = await usersResponse.json();
         setAllUsers(users);
@@ -285,7 +319,7 @@ export default function AdminPage() {
 
     setExporting(true);
     try {
-      const response = await fetch(`${API_URL}/admin/export/${selectedUserId}`, {
+      const response = await fetch(`${API_BASE}/files/admin/export/${selectedUserId}`, {
         credentials: "include",
       });
 
@@ -318,7 +352,7 @@ export default function AdminPage() {
     setDownloadingFile(filePath);
     try {
       const response = await fetch(
-        `${API_URL}/admin/store/${selectedUserId}/download?file=${encodeURIComponent(filePath)}`, 
+        `${API_BASE}/files/admin/store/${selectedUserId}/download?file=${encodeURIComponent(filePath)}`, 
         { credentials: "include" }
       );
 
@@ -348,9 +382,15 @@ export default function AdminPage() {
 
     try {
       const response = await fetch(
-        `${API_URL}/admin/store/${selectedUserId}/preview?file=${encodeURIComponent(filePath)}`, 
+        `${API_BASE}/files/admin/store/${selectedUserId}/preview?file=${encodeURIComponent(filePath)}`, 
         { credentials: "include" }
       );
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned HTML instead of JSON');
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -381,8 +421,12 @@ export default function AdminPage() {
     if (!selectedUserId) return;
     
     setLoadingFiles(true);
-    fetch(`${API_URL}/admin/store/${selectedUserId}`, { credentials: "include" })
+    fetch(`${API_BASE}/files/admin/store/${selectedUserId}`, { credentials: "include" })
       .then(res => {
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Server returned HTML instead of JSON');
+        }
         if (!res.ok) throw new Error('Failed to fetch store files');
         return res.json();
       })

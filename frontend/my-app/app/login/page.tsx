@@ -12,11 +12,19 @@ const Login: React.FC = () => {
 
   // Check if user is already logged in
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/me`, {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/me`, {
       credentials: "include",
     })
       .then((res) => {
         if (res.ok) {
+          return res.json();
+        }
+        throw new Error('Not logged in');
+      })
+      .then((data) => {
+        if (data.user?.admin) {
+          window.location.href = "/admin-page";
+        } else {
           window.location.href = "/main-page";
         }
       })
@@ -51,12 +59,20 @@ const Login: React.FC = () => {
     }
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/login`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include", // important to store the cookie
         body: JSON.stringify({ email, password }),
       });
+
+      // First check if response is JSON
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('Received non-JSON response:', text.substring(0, 200));
+        throw new Error('Server returned HTML instead of JSON. Check API URL.');
+      }
 
       const data = await res.json();
 
@@ -65,18 +81,16 @@ const Login: React.FC = () => {
       } else {
         setSuccess("Login successful!");
         setTimeout(() => setSuccess(""), 3000);
-          if (data.user.admin) {
-    window.location.href = "/admin-page";
-  }  else{       
-     window.location.href = "/main-page";
-
-  }
-        // Redirect to welcome page after successful login
-
+        
+        if (data.user?.admin) {
+          window.location.href = "/admin-page";
+        } else {       
+          window.location.href = "/main-page";
+        }
       }
-    } catch (err) {
-      showErrorMessage("Server error, please try again later.");
-      console.error(err);
+    } catch (err: any) {
+      console.error('Login error:', err);
+      showErrorMessage(err.message || "Server error, please try again later.");
     }
   };
 
@@ -100,12 +114,13 @@ const Login: React.FC = () => {
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm z-10">
         {/* Logo */}
         <div className="flex items-center mb-6">
-          <a href="/">          <img
-            src="logo-withoutbackground.png"
-            alt="login"
-            className="h-30 w-auto mr-2 mt-[-20px] mb-[-30px]"
-          /></a>
-
+          <a href="/">          
+            <img
+              src="logo-withoutbackground.png"
+              alt="login"
+              className="h-30 w-auto mr-2 mt-[-20px] mb-[-30px]"
+            />
+          </a>
         </div>
 
         {/* Heading */}

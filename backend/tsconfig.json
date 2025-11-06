@@ -1,25 +1,3 @@
-// {
-//   "compilerOptions": {
-//     "target": "ES2021",
-//     "module": "commonjs",
-//     "strict": true,
-//     "experimentalDecorators": true,
-//     "emitDecoratorMetadata": true,
-//     "outDir": "dist"
-//   },
-//   "include": ["./**/*.ts"]
-// }
-// async function main() {
-//   await initAdminORM();
-
-//   const PORT = Number(process.env.PORT) || 4000;
-//   app.listen(PORT, () => {
-//     console.log(`Server running on http://localhost:${PORT}`);
-//   });
-// }
-
-// main();
-
 {
   "compilerOptions": {
     "target": "ES2021",                  // modern JS features
@@ -30,7 +8,7 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,      // required by MikroORM
     "emitDecoratorMetadata": true,       // required by MikroORM
-    "outDir": "dist",                    // compiled files go here
+    "outDir": "dist",        
     "resolveJsonModule": true            // import JSON if needed
   },
   "include": ["./**/*.ts"]

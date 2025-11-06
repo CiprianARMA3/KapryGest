@@ -1,0 +1,12 @@
+{
+  "userId": 1,
+  "createdAt": "2025-11-04T20:19:07.987Z",
+  "subordinateWorkers": {
+    "totalCount": 0,
+    "activeWorkers": [],
+    "archivedWorkers": [],
+    "permissionsHistory": [],
+    "activityLogs": []
+  },
+  "lastUpdated": "2025-11-04T20:19:07.987Z"
+}

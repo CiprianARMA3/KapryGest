@@ -3,19 +3,31 @@
 import { useEffect, useState } from "react";
 
 interface User {
+  id: number;
   name: string;
   surname: string;
+  email: string;
+  username: string;
+  phone_number: string;
   admin: boolean;
+  suspended: boolean;
 }
 
 export default function Welcome() {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/me`, {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/me`, {
       credentials: "include",
     })
       .then((res) => {
+        // Check if response is JSON first
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Server returned HTML instead of JSON');
+        }
+        
         if (!res.ok) throw new Error("Not authorized");
         return res.json();
       })
@@ -27,13 +39,18 @@ export default function Welcome() {
           setUser(data); // set non-admin user
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error('Auth check failed:', error);
         // if not logged in, redirect to login page
         window.location.href = "/login";
+      })
+      .finally(() => {
+        setLoading(false);
       });
   }, []);
 
-  if (!user) return <div>Loading...</div>;
+  if (loading) return <div>Loading...</div>;
+  if (!user) return <div>Redirecting...</div>;
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
