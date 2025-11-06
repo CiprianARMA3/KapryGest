@@ -1,5 +1,0 @@
-{
-  "typescript.validate.enable": true,
-  "typescript.preferences.includePackageJsonAutoImports": "auto",
-  "typescript.suggest.autoImports": true
-}
