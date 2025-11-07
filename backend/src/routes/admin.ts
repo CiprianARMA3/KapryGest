@@ -27,6 +27,30 @@ router.get('/users/:id/subordinate-workers', authenticateToken, isAdmin, async (
       [tableName]
     );
     
+    router.get('/debug-table-structure/:id/:table', authenticateToken, isAdmin, async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.params.id);
+    const table = req.params.table;
+    const usersOrm = await MikroORM.init(usersConfig);
+    const conn = usersOrm.em.getConnection();
+    
+    const tableName = `${table}_${userId}`;
+    
+    const result = await conn.execute(`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns 
+      WHERE table_name = ?
+      ORDER BY ordinal_position;
+    `, [tableName]);
+    
+    await usersOrm.close();
+    res.json(result);
+  } catch (err) {
+    console.error('Debug table structure error:', err);
+    res.status(500).json({ error: "Failed to fetch table structure" });
+  }
+});
+    
     let workers: EntityData<Partial<any>>[] = [];
     if (tableExists[0].exists) {
       workers = await conn.execute(

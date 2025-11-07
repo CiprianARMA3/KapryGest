@@ -1,49 +1,38 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { 
+  authApi, 
+  adminAPI, 
+  filesAPI, 
+  fileUtils,
+  universalCrudAPI,
+  type User,
+  type FileItem,
+  type FileContent,
+  type SubordinateWorker 
+} from "../../lib/api";
+import CrudModal from "./crud/crud";
 
-interface User {
-  active_subscription: any;
-  id: number;
+interface TableField {
   name: string;
-  surname: string;
-  email: string;
-  username: string;
-  phone_number: string;
-  admin: boolean;
-  suspended: boolean;
+  type: 'text' | 'number' | 'email' | 'date' | 'select' | 'textarea' | 'password';
+  label: string;
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  placeholder?: string;
 }
 
-interface FileContent {
-  name: string;
-  content: string;
-  type: string;
-  mimeType?: string;
-  data?: string;
-  size?: number;
-}
-
-interface FileItem {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  isFile: boolean;
-  size: number;
-  children: FileItem[];
-}
-
-interface SubordinateWorker {
-  id: number;
-  name: string;
-  surname: string;
-  email: string;
-  phone_number: number;
-  role: string;
-  password: string;
-  permissions?: object;
-  logs?: object;
-  created_at: string;
-}
+// Safe error handler function
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'An unknown error occurred';
+};
 
 export default function AdminPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -76,42 +65,145 @@ export default function AdminPage() {
   const [showSubordinateWorkers, setShowSubordinateWorkers] = useState(false);
   const [loadingSubordinates, setLoadingSubordinates] = useState(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+  // CRUD states
+  const [crudModalOpen, setCrudModalOpen] = useState(false);
+  const [selectedTable, setSelectedTable] = useState<string>('');
+  const [editingData, setEditingData] = useState<any>(null);
+  const [crudLoading, setCrudLoading] = useState(false);
+
+  // Table configurations for all tables
+  const tableConfigs: Record<string, { fields: TableField[] }> = {
+    customers: {
+      fields: [
+        { name: 'name', type: 'text', label: 'First Name', required: true, placeholder: 'Enter first name' },
+        { name: 'surname', type: 'text', label: 'Last Name', required: true, placeholder: 'Enter last name' },
+        { name: 'email', type: 'email', label: 'Email', placeholder: 'Enter email address' },
+        { name: 'phone_number', type: 'text', label: 'Phone Number', placeholder: 'Enter phone number' },
+        { name: 'billing_address', type: 'textarea', label: 'Billing Address', placeholder: 'Enter billing address' }
+      ]
+    },
+    products: {
+      fields: [
+        { name: 'name', type: 'text', label: 'Product Name', required: true, placeholder: 'Enter product name' },
+        { name: 'category', type: 'text', label: 'Category', required: true, placeholder: 'Enter category' },
+        { name: 'price', type: 'number', label: 'Price', required: true, placeholder: '0.00' },
+        { name: 'reduced_percentage', type: 'number', label: 'Discount %', placeholder: '0' },
+        { name: 'description', type: 'textarea', label: 'Description', placeholder: 'Enter product description' }
+      ]
+    },
+    orders: {
+      fields: [
+        { name: 'product_id', type: 'number', label: 'Product ID', required: true, placeholder: 'Enter product ID' },
+        { name: 'quantity', type: 'number', label: 'Quantity', required: true, placeholder: 'Enter quantity' },
+        { name: 'TVA', type: 'number', label: 'TVA', placeholder: 'Enter TVA' },
+        { name: 'total', type: 'number', label: 'Total', required: true, placeholder: 'Enter total amount' },
+        { name: 'status', type: 'select', label: 'Status', required: true, 
+          options: [
+            { value: 'pending', label: 'Pending' },
+            { value: 'processing', label: 'Processing' },
+            { value: 'completed', label: 'Completed' },
+            { value: 'cancelled', label: 'Cancelled' }
+          ]
+        }
+      ]
+    },
+    stocks: {
+      fields: [
+        { name: 'product_id', type: 'number', label: 'Product ID', required: true, placeholder: 'Enter product ID' },
+        { name: 'quantity', type: 'number', label: 'Quantity', required: true, placeholder: 'Enter quantity' },
+        { name: 'location', type: 'text', label: 'Location', placeholder: 'Enter storage location' },
+        { name: 'minimum_stock', type: 'number', label: 'Minimum Stock', placeholder: 'Enter minimum stock level' }
+      ]
+    },
+    invoices: {
+      fields: [
+        { name: 'order_id', type: 'number', label: 'Order ID', required: true, placeholder: 'Enter order ID' },
+        { name: 'customer_id', type: 'number', label: 'Customer ID', placeholder: 'Enter customer ID' },
+        { name: 'total_amount', type: 'number', label: 'Total Amount', required: true, placeholder: 'Enter total amount' },
+        { name: 'issue_date', type: 'date', label: 'Issue Date', placeholder: 'Select issue date' },
+        { name: 'due_date', type: 'date', label: 'Due Date', placeholder: 'Select due date' },
+        { name: 'status', type: 'select', label: 'Status', required: true,
+          options: [
+            { value: 'pending', label: 'Pending' },
+            { value: 'paid', label: 'Paid' },
+            { value: 'overdue', label: 'Overdue' },
+            { value: 'cancelled', label: 'Cancelled' }
+          ]
+        }
+      ]
+    },
+    paymentlogs: {
+      fields: [
+        { name: 'invoice_id', type: 'number', label: 'Invoice ID', required: true, placeholder: 'Enter invoice ID' },
+        { name: 'amount', type: 'number', label: 'Amount', required: true, placeholder: 'Enter payment amount' },
+        { name: 'payment_method', type: 'select', label: 'Payment Method', required: true,
+          options: [
+            { value: 'credit_card', label: 'Credit Card' },
+            { value: 'bank_transfer', label: 'Bank Transfer' },
+            { value: 'cash', label: 'Cash' },
+            { value: 'paypal', label: 'PayPal' }
+          ]
+        },
+        { name: 'transaction_id', type: 'text', label: 'Transaction ID', placeholder: 'Enter transaction ID' },
+        { name: 'status', type: 'select', label: 'Status', required: true,
+          options: [
+            { value: 'completed', label: 'Completed' },
+            { value: 'failed', label: 'Failed' },
+            { value: 'pending', label: 'Pending' },
+            { value: 'refunded', label: 'Refunded' }
+          ]
+        }
+      ]
+    },
+    subordinateworkers: {
+      fields: [
+        { name: 'name', type: 'text', label: 'First Name', required: true, placeholder: 'Enter first name' },
+        { name: 'surname', type: 'text', label: 'Last Name', required: true, placeholder: 'Enter last name' },
+        { name: 'email', type: 'email', label: 'Email', required: true, placeholder: 'Enter email address' },
+        { name: 'phone_number', type: 'text', label: 'Phone Number', required: true, placeholder: 'Enter phone number' },
+        { name: 'role', type: 'text', label: 'Role', required: true, placeholder: 'Enter role' },
+        { name: 'password', type: 'password', label: 'Password', required: true, placeholder: 'Enter password' }
+      ]
+    }
+  };
 
   // Fetch current admin user
   useEffect(() => {
-    fetch(`${API_BASE}/auth/me`, { credentials: "include" })
-      .then(res => {
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Server returned HTML instead of JSON');
+    const fetchCurrentUser = async () => {
+      try {
+        const user = await authApi.getCurrentUser();
+        if (!user.admin) {
+          window.location.href = "/main-page";
+        } else {
+          setCurrentUser(user);
         }
-        return res.ok ? res.json() : Promise.reject("Not authorized");
-      })
-      .then((user: User) => {
-        if (!user.admin) window.location.href = "/main-page";
-        else setCurrentUser(user);
-      })
-      .catch(() => window.location.href = "/login");
-  }, [API_BASE]);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        console.error('Failed to fetch current user:', errorMessage);
+        window.location.href = "/login";
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
 
   // Fetch all users
   useEffect(() => {
-    if (!currentUser) return;
-    fetch(`${API_BASE}/users`, { credentials: "include" })
-      .then(res => {
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Server returned HTML instead of JSON');
-        }
-        return res.ok ? res.json() : Promise.reject("Failed to fetch users");
-      })
-      .then((users: User[]) => {
+    const fetchAllUsers = async () => {
+      if (!currentUser) return;
+      
+      try {
+        const users = await adminAPI.getAllUsers();
         setAllUsers(users);
         setFilteredUsers(users);
-      })
-      .catch(console.error);
-  }, [currentUser, API_BASE]);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        console.error('Failed to fetch users:', errorMessage);
+      }
+    };
+
+    fetchAllUsers();
+  }, [currentUser]);
 
   // Filter users
   useEffect(() => {
@@ -130,63 +222,59 @@ export default function AdminPage() {
 
   // Fetch store files and tenant tables when user is selected
   useEffect(() => {
-    if (!selectedUserId) return;
+    const fetchUserData = async () => {
+      if (!selectedUserId) return;
 
-    setStoreFiles([]);
-    setTenantData({});
-    setTenantColumns({});
-    setExpandedFolders(new Set());
-    setLoadingFiles(true);
-    setSubordinateWorkers([]);
-    setShowSubordinateWorkers(false);
+      setStoreFiles([]);
+      setTenantData({});
+      setTenantColumns({});
+      setExpandedFolders(new Set());
+      setLoadingFiles(true);
+      setSubordinateWorkers([]);
+      setShowSubordinateWorkers(false);
 
-    // Fetch store files
-    fetch(`${API_BASE}/files/admin/store/${selectedUserId}`, { credentials: "include" })
-      .then(res => {
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Server returned HTML instead of JSON');
-        }
-        if (!res.ok) throw new Error('Failed to fetch store files');
-        return res.json();
-      })
-      .then((files: FileItem[]) => {
+      try {
+        // Fetch store files
+        const files = await filesAPI.getStoreFiles(selectedUserId);
         setStoreFiles(files);
         setLoadingFiles(false);
-      })
-      .catch(err => {
-        console.error('Error fetching files:', err);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        console.error('Error fetching files:', errorMessage);
         setLoadingFiles(false);
-      });
+      }
 
-    // Fetch tenant tables - INCLUDING SUBORDINATE WORKERS
-    const tables = ["customers", "orders", "products", "stocks", "invoices", "paymentlogs", "subordinateworkers"];
-    tables.forEach(table => {
-      fetch(`${API_BASE}/admin/tenant/${selectedUserId}/${table}`, { credentials: "include" })
-        .then(res => {
-          const contentType = res.headers.get('content-type');
-          if (!contentType || !contentType.includes('application/json')) {
-            throw new Error('Server returned HTML instead of JSON');
-          }
-          return res.ok ? res.json() : Promise.reject(`Failed ${table}`);
-        })
-        .then((rows: any[]) => {
+      // Fetch tenant tables
+      const tables = ["customers", "orders", "products", "stocks", "invoices", "paymentlogs", "subordinateworkers"];
+      
+      const fetchTableData = async (table: string) => {
+        try {
+          const rows = await adminAPI.getTenantTable(selectedUserId, table);
           setTenantData(prev => ({ ...prev, [table]: rows }));
+          
           if (rows.length > 0) {
             setTenantColumns(prev => ({ ...prev, [table]: Object.keys(rows[0]) }));
           } else {
-            fetch(`${API_BASE}/admin/tenant/${selectedUserId}/${table}/columns`, { credentials: "include" })
-              .then(res => res.json())
-              .then((cols: string[]) => setTenantColumns(prev => ({ ...prev, [table]: cols })))
-              .catch(console.error);
+            try {
+              const columns = await adminAPI.getTenantTableColumns(selectedUserId, table);
+              setTenantColumns(prev => ({ ...prev, [table]: columns }));
+            } catch (columnError) {
+              const columnErrorMessage = getErrorMessage(columnError);
+              console.error(`Error fetching columns for ${table}:`, columnErrorMessage);
+            }
           }
-        })
-        .catch(err => {
-          console.error(`Error fetching table ${table}:`, err);
+        } catch (error) {
+          const errorMessage = getErrorMessage(error);
+          console.error(`Error fetching table ${table}:`, errorMessage);
           setTenantData(prev => ({ ...prev, [table]: [] }));
-        });
-    });
-  }, [selectedUserId, API_BASE]);
+        }
+      };
+
+      tables.forEach(table => fetchTableData(table));
+    };
+
+    fetchUserData();
+  }, [selectedUserId]);
 
   // Fetch subordinate workers for selected user
   const fetchSubordinateWorkers = async () => {
@@ -194,60 +282,94 @@ export default function AdminPage() {
     
     setLoadingSubordinates(true);
     try {
-      const response = await fetch(`${API_BASE}/admin/users/${selectedUserId}/subordinate-workers`, {
-        credentials: "include"
-      });
-      
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Server returned HTML instead of JSON');
-      }
-      
-      if (!response.ok) throw new Error('Failed to fetch subordinate workers');
-      
-      const workers = await response.json();
+      const workers = await adminAPI.getSubordinateWorkers(selectedUserId);
       setSubordinateWorkers(workers);
       setShowSubordinateWorkers(true);
     } catch (error) {
-      console.error('Error fetching subordinate workers:', error);
-      alert('Failed to load subordinate workers');
+      const errorMessage = getErrorMessage(error);
+      console.error('Error fetching subordinate workers:', errorMessage);
+      alert('Failed to load subordinate workers: ' + errorMessage);
     } finally {
       setLoadingSubordinates(false);
     }
   };
 
-  // Helper function to get file icon
-  const getFileIcon = (fileName: string, isDirectory: boolean) => {
-    if (isDirectory) return '📁';
-    
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'];
-    
-    if (imageExtensions.includes(ext || '')) return '🖼️';
-    if (ext === 'pdf') return '📕';
-    if (ext === 'doc' || ext === 'docx') return '📄';
-    if (ext === 'xls' || ext === 'xlsx') return '📊';
-    if (ext === 'zip' || ext === 'rar') return '📦';
-    
-    return '📄';
+  // UNIVERSAL CRUD Handlers
+  const handleAddNew = (tableName: string) => {
+    setSelectedTable(tableName);
+    setEditingData({});
+    setCrudModalOpen(true);
   };
 
-  // Helper to get file type text
-  const getFileTypeText = (fileName: string): string => {
-    const ext = fileName.split('.').pop()?.toLowerCase() || 'file';
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'];
-    
-    if (imageExtensions.includes(ext)) return 'Image';
-    if (ext === 'pdf') return 'PDF';
-    if (ext === 'doc' || ext === 'docx') return 'Document';
-    if (ext === 'xls' || ext === 'xlsx') return 'Spreadsheet';
-    if (ext === 'zip' || ext === 'rar') return 'Archive';
-    if (ext === 'txt' || ext === 'log') return 'Text File';
-    if (ext === 'js' || ext === 'ts') return 'JavaScript';
-    if (ext === 'json') return 'JSON';
-    if (ext === 'html' || ext === 'css') return '🌐 Web';
-    
-    return ext.toUpperCase();
+  const handleEdit = (tableName: string, row: any) => {
+    setSelectedTable(tableName);
+    setEditingData(row);
+    setCrudModalOpen(true);
+  };
+
+  // Universal handleSave for ALL tables
+  const handleSave = async (data: any) => {
+    setCrudLoading(true);
+    try {
+      const isEditing = editingData && editingData.id;
+      
+      console.log('🔄 Universal CRUD Operation Started:', {
+        table: selectedTable,
+        isEditing,
+        editingData,
+        formData: data
+      });
+
+      let result: any;
+
+      if (isEditing) {
+        result = await universalCrudAPI.update(selectedTable, editingData.id, data);
+        console.log('✅ Update result:', result);
+      } else {
+        result = await universalCrudAPI.create(selectedTable, data);
+        console.log('✅ Create result:', result);
+      }
+
+      console.log('🔄 Refreshing tenant data...');
+      // Refresh the tenant data
+      if (selectedUserId) {
+        const refreshedData = await adminAPI.getTenantTable(selectedUserId, selectedTable);
+        console.log('✅ Refreshed data:', refreshedData);
+        setTenantData(prev => ({ ...prev, [selectedTable]: refreshedData }));
+      }
+
+      alert(result.message || `${selectedTable} ${isEditing ? 'updated' : 'created'} successfully!`);
+      console.log('✅ Universal CRUD Operation Completed Successfully');
+      
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      console.error('❌ Universal CRUD Operation Failed:', errorMessage);
+      alert('Failed to save data: ' + errorMessage);
+    } finally {
+      setCrudLoading(false);
+    }
+  };
+
+  // Universal handleDelete for ALL tables
+  const handleDelete = async (id: number) => {
+    setCrudLoading(true);
+    try {
+      await universalCrudAPI.delete(selectedTable, id);
+
+      // Refresh the tenant data
+      if (selectedUserId) {
+        const refreshedData = await adminAPI.getTenantTable(selectedUserId, selectedTable);
+        setTenantData(prev => ({ ...prev, [selectedTable]: refreshedData }));
+      }
+
+      alert(`${selectedTable} deleted successfully!`);
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      console.error('Error deleting data:', errorMessage);
+      alert('Failed to delete data: ' + errorMessage);
+    } finally {
+      setCrudLoading(false);
+    }
   };
 
   // Toggle folder expansion
@@ -285,62 +407,31 @@ export default function AdminPage() {
     setActionError(null);
     
     try {
-      let url = '';
-      let method = 'POST';
-
-      if (selectedAction.type === 'delete') {
-        url = `${API_BASE}/admin/users/${selectedAction.userId}`;
-        method = 'DELETE';
-      } else if (selectedAction.type === 'suspend') {
-        url = `${API_BASE}/admin/users/${selectedAction.userId}/suspend`;
-      } else if (selectedAction.type === 'unsuspend') {
-        url = `${API_BASE}/admin/users/${selectedAction.userId}/unsuspend`;
+      let result: { message: string };
+      
+      switch (selectedAction.type) {
+        case 'suspend':
+          result = await adminAPI.suspendUser(selectedAction.userId, actionPassword);
+          break;
+        case 'unsuspend':
+          result = await adminAPI.unsuspendUser(selectedAction.userId, actionPassword);
+          break;
+        case 'delete':
+          result = await adminAPI.deleteUser(selectedAction.userId, actionPassword);
+          break;
       }
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: "include",
-        body: JSON.stringify({ password: actionPassword }),
-      });
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Server returned HTML instead of JSON');
-      }
-
-      if (!response.ok) {
-        let errorMessage = 'Action failed';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
-        } catch (jsonError) {
-          try {
-            const errorText = await response.text();
-            errorMessage = errorText || `HTTP error! status: ${response.status}`;
-          } catch (textError) {
-            errorMessage = `HTTP error! status: ${response.status}`;
-          }
-        }
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
       alert(result.message || `${selectedAction.type} action completed successfully`);
       
-      const usersResponse = await fetch(`${API_BASE}/users`, { credentials: "include" });
-      if (usersResponse.ok) {
-        const users = await usersResponse.json();
-        setAllUsers(users);
-        setFilteredUsers(users);
-      }
+      // Refresh users list
+      const users = await adminAPI.getAllUsers();
+      setAllUsers(users);
+      setFilteredUsers(users);
 
       closeActionModal();
     } catch (error) {
-      console.error('User action error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Action failed';
+      const errorMessage = getErrorMessage(error);
+      console.error('User action error:', errorMessage);
       setActionError(errorMessage);
       alert(`Error: ${errorMessage}`);
     } finally {
@@ -354,15 +445,13 @@ export default function AdminPage() {
 
     setExporting(true);
     try {
-      const response = await fetch(`${API_BASE}/files/admin/export/${selectedUserId}`, {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Export failed: ${response.statusText}`);
+      const blob = await filesAPI.exportAll(selectedUserId);
+      
+      // Check if blob is valid
+      if (!blob || blob.size === 0) {
+        throw new Error('Received empty file');
       }
-
-      const blob = await response.blob();
+      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -370,11 +459,22 @@ export default function AdminPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
+      
+      // Clean up the URL object
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
     } catch (error) {
-      console.error('Export error:', error);
-      alert('Failed to export data');
+      const errorMessage = getErrorMessage(error);
+      console.error('Export error:', errorMessage);
+      
+      // Check if it's a JSON error (API returning error message)
+      if (errorMessage.includes('JSON')) {
+        alert('Server error: Could not export files. Please try again.');
+      } else {
+        alert('Failed to export data: ' + errorMessage);
+      }
     } finally {
       setExporting(false);
     }
@@ -386,14 +486,13 @@ export default function AdminPage() {
 
     setDownloadingFile(filePath);
     try {
-      const response = await fetch(
-        `${API_BASE}/files/admin/store/${selectedUserId}/download?file=${encodeURIComponent(filePath)}`, 
-        { credentials: "include" }
-      );
-
-      if (!response.ok) throw new Error('Download failed');
-
-      const blob = await response.blob();
+      const blob = await filesAPI.downloadFile(selectedUserId, filePath);
+      
+      // Check if blob is valid
+      if (!blob || blob.size === 0) {
+        throw new Error('Received empty file');
+      }
+      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -401,11 +500,22 @@ export default function AdminPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
+      
+      // Clean up the URL object
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
     } catch (error) {
-      console.error('Download error:', error);
-      alert('Failed to download file');
+      const errorMessage = getErrorMessage(error);
+      console.error('Download error:', errorMessage);
+      
+      // Check if it's a JSON error (API returning error message)
+      if (errorMessage.includes('JSON')) {
+        alert('Server error: Could not download file. The file might not exist.');
+      } else {
+        alert('Failed to download file: ' + errorMessage);
+      }
     } finally {
       setDownloadingFile(null);
     }
@@ -416,22 +526,7 @@ export default function AdminPage() {
     if (!selectedUserId) return;
 
     try {
-      const response = await fetch(
-        `${API_BASE}/files/admin/store/${selectedUserId}/preview?file=${encodeURIComponent(filePath)}`, 
-        { credentials: "include" }
-      );
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Server returned HTML instead of JSON');
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Preview failed');
-      }
-
-      const fileData = await response.json();
+      const fileData = await filesAPI.previewFile(selectedUserId, filePath);
       
       // Handle image files
       if (fileData.type === 'image') {
@@ -451,10 +546,10 @@ export default function AdminPage() {
           type: fileData.type || 'text'
         });
       }
-
     } catch (error) {
-      console.error('Preview error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to preview file');
+      const errorMessage = getErrorMessage(error);
+      console.error('Preview error:', errorMessage);
+      alert('Failed to preview file: ' + errorMessage);
     }
   };
 
@@ -462,7 +557,7 @@ export default function AdminPage() {
   const previewImageDirect = (filePath: string) => {
     if (!selectedUserId) return;
     
-    const imageUrl = `${API_BASE}/files/admin/store/${selectedUserId}/preview?file=${encodeURIComponent(filePath)}&direct=true`;
+    const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/files/admin/store/${selectedUserId}/preview?file=${encodeURIComponent(filePath)}&direct=true`;
     window.open(imageUrl, '_blank');
   };
 
@@ -472,27 +567,19 @@ export default function AdminPage() {
   };
 
   // Refresh file list
-  const refreshFiles = () => {
+  const refreshFiles = async () => {
     if (!selectedUserId) return;
     
     setLoadingFiles(true);
-    fetch(`${API_BASE}/files/admin/store/${selectedUserId}`, { credentials: "include" })
-      .then(res => {
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Server returned HTML instead of JSON');
-        }
-        if (!res.ok) throw new Error('Failed to fetch store files');
-        return res.json();
-      })
-      .then((files: FileItem[]) => {
-        setStoreFiles(files);
-        setLoadingFiles(false);
-      })
-      .catch(err => {
-        console.error('Error refreshing files:', err);
-        setLoadingFiles(false);
-      });
+    try {
+      const files = await filesAPI.getStoreFiles(selectedUserId);
+      setStoreFiles(files);
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      console.error('Error refreshing files:', errorMessage);
+    } finally {
+      setLoadingFiles(false);
+    }
   };
 
   // Helper to render files and folders recursively with expandable folders
@@ -519,7 +606,7 @@ export default function AdminPage() {
               <span className={`text-sm ${
                 item.isDirectory ? 'text-blue-600' : 'text-gray-600'
               }`}>
-                {getFileIcon(item.name, item.isDirectory)}
+                {fileUtils.getFileIcon(item.name, item.isDirectory)}
               </span>
             </div>
             <div className="flex-1">
@@ -532,42 +619,42 @@ export default function AdminPage() {
                 {item.isDirectory ? (
                   `📂 FOLDER • ${item.children.length} items`
                 ) : (
-                  `${getFileTypeText(item.name)} • ${formatFileSize(item.size)}`
+                  `${fileUtils.getFileTypeText(item.name)} • ${fileUtils.formatFileSize(item.size)}`
                 )}
               </div>
             </div>
           </div>
           
-      {item.isFile && (
-        <div className="flex space-x-2">
-          {/* Show "View Image" for image files instead of Preview */}
-          {['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'].some(ext => 
-            item.name.toLowerCase().endsWith(ext)
-          ) ? (
-            <button
-              onClick={() => previewImageDirect(item.path)}
-              className="px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-            >
-              View Image
-            </button>
-          ) : (
-            // Show Preview button for non-image files
-            <button
-              onClick={() => previewFileContent(item.path)}
-              className="px-3 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
-            >
-              Preview
-            </button>
+          {item.isFile && (
+            <div className="flex space-x-2">
+              {/* Show "View Image" for image files instead of Preview */}
+              {['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'].some(ext => 
+                item.name.toLowerCase().endsWith(ext)
+              ) ? (
+                <button
+                  onClick={() => previewImageDirect(item.path)}
+                  className="px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                >
+                  View Image
+                </button>
+              ) : (
+                // Show Preview button for non-image files
+                <button
+                  onClick={() => previewFileContent(item.path)}
+                  className="px-3 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                >
+                  Preview
+                </button>
+              )}
+              <button
+                onClick={() => downloadFile(item.path)}
+                disabled={downloadingFile === item.path}
+                className="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-400 transition-colors"
+              >
+                {downloadingFile === item.path ? 'Downloading...' : 'Download'}
+              </button>
+            </div>
           )}
-          <button
-            onClick={() => downloadFile(item.path)}
-            disabled={downloadingFile === item.path}
-            className="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-400 transition-colors"
-          >
-            {downloadingFile === item.path ? 'Downloading...' : 'Download'}
-          </button>
-        </div>
-      )}
         </div>
         
         {/* Render children recursively for expanded directories */}
@@ -578,15 +665,6 @@ export default function AdminPage() {
         )}
       </div>
     ));
-  };
-
-  // Helper to format file size
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   // Count total files recursively
@@ -619,6 +697,28 @@ export default function AdminPage() {
     return String(data);
   };
 
+  // Render table actions
+  const renderTableActions = (tableName: string, row: any) => (
+    <div className="flex space-x-2">
+      <button
+        onClick={() => handleEdit(tableName, row)}
+        className="px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+      >
+        Edit
+      </button>
+      <button
+        onClick={() => {
+          if (window.confirm(`Are you sure you want to delete this ${tableName}?`)) {
+            handleDelete(row.id);
+          }
+        }}
+        className="px-3 py-1 text-xs font-medium bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+      >
+        Delete
+      </button>
+    </div>
+  );
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -641,7 +741,7 @@ export default function AdminPage() {
                 Preview: {previewFile.name}
                 {previewFile.type === 'image' && previewFile.size && (
                   <span className="text-sm text-gray-500 ml-2">
-                    ({formatFileSize(previewFile.size)})
+                    ({fileUtils.formatFileSize(previewFile.size)})
                   </span>
                 )}
               </h3>
@@ -788,6 +888,19 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* CRUD Modal */}
+      <CrudModal
+        isOpen={crudModalOpen}
+        onClose={() => setCrudModalOpen(false)}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        tableName={selectedTable}
+        fields={tableConfigs[selectedTable]?.fields || []}
+        initialData={editingData}
+        loading={crudLoading}
+        allowDelete={!!editingData?.id}
+      />
+
       <img src="logo-withoutbackground.png" className="w-60 mb-[-80px] mt-[-100px]"/>
       
       {/* Header */}
@@ -902,7 +1015,7 @@ export default function AdminPage() {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={9} className="py-8 px-4 text-center text-gray-500">
+                  <td colSpan={10} className="py-8 px-4 text-center text-gray-500">
                     No users found matching your search
                   </td>
                 </tr>
@@ -994,6 +1107,7 @@ export default function AdminPage() {
                           <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                           <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
                           <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -1007,6 +1121,9 @@ export default function AdminPage() {
                             <td className="py-3 px-4 text-sm text-gray-600">{worker.role}</td>
                             <td className="py-3 px-4 text-sm text-gray-500">
                               {new Date(worker.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="py-3 px-4 text-sm">
+                              {renderTableActions('subordinateworkers', worker)}
                             </td>
                           </tr>
                         ))}
@@ -1064,12 +1181,22 @@ export default function AdminPage() {
                 {Object.keys(tenantData).map(tableName => (
                   <div key={tableName} className="border rounded-lg overflow-hidden">
                     <div className="bg-gray-50 px-4 py-3 border-b">
-                      <h4 className="font-semibold text-gray-800 capitalize">
-                        {tableName === "subordinateworkers" ? "Subordinate Workers" : tableName}
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        {tenantData[tableName]?.length || 0} rows, {tenantColumns[tableName]?.length || 0} columns
-                      </p>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="font-semibold text-gray-800 capitalize">
+                            {tableName === "subordinateworkers" ? "Subordinate Workers" : tableName}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            {tenantData[tableName]?.length || 0} rows, {tenantColumns[tableName]?.length || 0} columns
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNew(tableName)}
+                          className="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                        >
+                          Add New
+                        </button>
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="min-w-full">
@@ -1080,6 +1207,9 @@ export default function AdminPage() {
                                 {col}
                               </th>
                             ))}
+                            <th className="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                              Actions
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -1098,10 +1228,13 @@ export default function AdminPage() {
                                   ) : 'NULL'}
                                 </td>
                               ))}
+                              <td className="py-2 px-4 text-sm">
+                                {renderTableActions(tableName, row)}
+                              </td>
                             </tr>
                           )) : (
                             <tr>
-                              <td colSpan={tenantColumns[tableName]?.length || 1} className="py-4 px-4 text-center text-gray-500">
+                              <td colSpan={(tenantColumns[tableName]?.length || 0) + 1} className="py-4 px-4 text-center text-gray-500">
                                 No data found in this table
                               </td>
                             </tr>
