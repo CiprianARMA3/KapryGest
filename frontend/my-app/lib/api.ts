@@ -261,6 +261,36 @@ export interface FileContent {
   size?: number;
 }
 
+// New File System Interfaces for viewfiles API
+export interface FileSystemItem {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isFile: boolean;
+  size: number;
+  modified: Date;
+  children?: FileSystemItem[];
+}
+
+export interface FileSystemContent {
+  name: string;
+  path: string;
+  content: string;
+  type: string;
+  mimeType: string;
+  size: number;
+  encoding?: string;
+}
+
+export interface FolderStructure {
+  path: string;
+  basePath: string;
+  items: FileSystemItem[];
+  totalItems: number;
+  totalDirectories: number;
+  totalFiles: number;
+}
+
 class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
@@ -339,10 +369,20 @@ class ApiClient {
     });
   }
 
-  async delete<T>(endpoint: string, p0?: { body: string; }): Promise<T> {
-    return this.request<T>(endpoint, {
+async delete<T>(endpoint: string, data?: any): Promise<T> {
+    const options: RequestInit = {
       method: 'DELETE',
-    });
+    };
+
+    // Add body if data is provided
+    if (data) {
+      options.headers = {
+        'Content-Type': 'application/json',
+      };
+      options.body = JSON.stringify(data);
+    }
+
+    return this.request<T>(endpoint, options);
   }
 }
 
@@ -411,10 +451,7 @@ export const ordersAPI = {
     apiClient.patch<{ message: string; order: Order }>(`/orders/${id}/status`, { status }),
 };
 
-// Files API methods
-// In your lib/api.ts file, update the filesAPI section:
-
-// Files API methods
+// Files API methods (Existing file operations)
 export const filesAPI = {
   getStoreFiles: (userId: number) => 
     apiClient.get<FileItem[]>(`/files/admin/store/${userId}`),
@@ -449,6 +486,38 @@ export const filesAPI = {
 
     return await response.blob();
   },
+};
+
+// View Files API methods (New file system operations)
+export const viewFilesAPI = {
+  // File System Operations
+  getFolderStructure: (basePath?: string, relativePath?: string) => 
+    apiClient.get<FolderStructure>(`/viewfiles/structure?basePath=${encodeURIComponent(basePath || '')}&relativePath=${encodeURIComponent(relativePath || '')}`),
+  
+  getFilePreview: (filePath: string, basePath?: string, maxSize?: number) => 
+    apiClient.get<FileSystemContent>(`/viewfiles/preview?filePath=${encodeURIComponent(filePath)}&basePath=${encodeURIComponent(basePath || '')}&maxSize=${maxSize || 10485760}`),
+  
+  createItem: (basePath: string, itemPath: string, type: 'file' | 'directory', content?: string) => 
+    apiClient.post<{ message: string; path: string }>('/viewfiles/create', { basePath, path: itemPath, type, content }),
+  
+  updateFile: (basePath: string, filePath: string, content: string) => 
+    apiClient.put<{ message: string; path: string; size: number; modified: Date }>('/viewfiles/update', { basePath, path: filePath, content }),
+  
+  renameItem: (basePath: string, oldPath: string, newPath: string) => 
+    apiClient.put<{ message: string; oldPath: string; newPath: string }>('/viewfiles/rename', { basePath, oldPath, newPath }),
+  
+  deleteItem: (basePath: string, itemPath: string, recursive?: boolean) => 
+    apiClient.delete<{ message: string; path: string }>('/viewfiles/delete', { 
+      basePath, 
+      path: itemPath, 
+      recursive: recursive || false 
+    }),
+
+  copyItem: (basePath: string, sourcePath: string, destinationPath: string) => 
+    apiClient.post<{ message: string; sourcePath: string; destinationPath: string }>('/viewfiles/copy', { basePath, sourcePath, destinationPath }),
+  
+  moveItem: (basePath: string, sourcePath: string, destinationPath: string) => 
+    apiClient.post<{ message: string; sourcePath: string; destinationPath: string }>('/viewfiles/move', { basePath, sourcePath, destinationPath }),
 };
 
 // Admin API methods
@@ -568,6 +637,85 @@ export const fileUtils = {
   }
 };
 
+// New File System Utility functions
+export const fileSystemUtils = {
+  formatFileSize: (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  },
+
+  getFileIcon: (item: FileSystemItem): string => {
+    if (item.isDirectory) return '📁';
+    
+    const ext = item.name.split('.').pop()?.toLowerCase();
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg'];
+    const codeExtensions = ['js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'json', 'xml'];
+    const documentExtensions = ['pdf', 'doc', 'docx', 'txt', 'md'];
+    const spreadsheetExtensions = ['xls', 'xlsx', 'csv'];
+    
+    if (imageExtensions.includes(ext || '')) return '🖼️';
+    if (codeExtensions.includes(ext || '')) return '📝';
+    if (documentExtensions.includes(ext || '')) return '📄';
+    if (spreadsheetExtensions.includes(ext || '')) return '📊';
+    if (ext === 'zip' || ext === 'rar') return '📦';
+    
+    return '📄';
+  },
+
+  canPreview: (item: FileSystemItem): boolean => {
+    if (item.isDirectory) return false;
+    
+    const ext = item.name.split('.').pop()?.toLowerCase();
+    const previewableExtensions = [
+      'txt', 'md', 'json', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 
+      'xml', 'csv', 'log', 'yml', 'yaml'
+    ];
+    
+    return previewableExtensions.includes(ext || '') && item.size < 10485760; // 10MB limit
+  },
+
+  getFileType: (filename: string): string => {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    const types: { [key: string]: string } = {
+      'js': 'JavaScript',
+      'ts': 'TypeScript',
+      'jsx': 'React JSX',
+      'tsx': 'React TSX',
+      'html': 'HTML',
+      'css': 'CSS',
+      'scss': 'SASS',
+      'json': 'JSON',
+      'xml': 'XML',
+      'csv': 'CSV',
+      'md': 'Markdown',
+      'txt': 'Text',
+      'pdf': 'PDF',
+      'doc': 'Word Document',
+      'docx': 'Word Document',
+      'xls': 'Excel Spreadsheet',
+      'xlsx': 'Excel Spreadsheet',
+      'zip': 'Archive',
+      'rar': 'Archive',
+      'png': 'Image',
+      'jpg': 'Image',
+      'jpeg': 'Image',
+      'gif': 'Image',
+      'svg': 'Vector Image',
+      'mp4': 'Video',
+      'mp3': 'Audio'
+    };
+    
+    return types[ext] || 'File';
+  },
+
+  formatDate: (date: Date): string => {
+    return new Date(date).toLocaleString();
+  }
+};
+
 export const adminCrudAPI = {
   // Generic CRUD operations
   create: (userId: number, table: string, data: any) => 
@@ -590,18 +738,19 @@ export const adminCrudAPI = {
     apiClient.delete<{ message: string }>(`/admin/crud/${userId}/subordinateworkers/${id}`),
 };
 
-
 // Export everything for convenience
 export default {
   auth: authApi,
   customers: customersAPI,
   products: productsAPI,
   orders: ordersAPI,
-  files: filesAPI,
+  files: filesAPI, // Existing file operations
+  viewfiles: viewFilesAPI, // New view files operations
   admin: adminAPI,
   subordinates: subordinatesAPI,
   payments: paymentsAPI,
   subscriptions: subscriptionsAPI,
   utils: fileUtils,
+  fileSystemUtils: fileSystemUtils, // New file system utilities
   client: apiClient
 };

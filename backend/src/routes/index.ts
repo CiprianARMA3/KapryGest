@@ -9,6 +9,8 @@ import subscriptionRoutes from './subscriptions';
 import fileRoutes from './files';
 import universalCrudRoutes from './universalCrud'; // Add this
 import adminCrudRoutes from './adminCrud'; // Add this
+import viewFilesRoutes from './viewfiles'; // New view files routes
+
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -18,6 +20,7 @@ router.use('/subordinate-workers', subordinateRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/subscriptions', subscriptionRoutes);
 router.use('/files', fileRoutes);
+router.use('/viewfiles', viewFilesRoutes); // New view files operations
 
 // Universal CRUD routes for all tables
 router.use('/crud', universalCrudRoutes);

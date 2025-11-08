@@ -14,6 +14,7 @@ import {
 } from "../../lib/api";
 import CrudModal from "./crud/crud";
 import './styles/styles.css';
+import FileManager from './components/FileManager';
 
 interface TableField {
   name: string;
@@ -1228,10 +1229,13 @@ const handleSave = async (data: any) => {
         return (
           <div className="p-8">
             <div className="card bg-base-100 shadow-xl">
-              <div className="card-body">
+              {/* <div className="card-body">
                 <h2 className="card-title text-2xl">File Explorer</h2>
                 <p>Select a user from the Users section to view their files.</p>
-              </div>
+              </div> */}
+            </div>
+            <div className="mt-[100px]">
+              <FileManager basePath="/home/cipriankali/Desktop/KapryGest/backend/db/store" />
             </div>
           </div>
         );
