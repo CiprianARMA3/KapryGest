@@ -10,7 +10,8 @@ import {
   type User,
   type FileItem,
   type FileContent,
-  type SubordinateWorker 
+  type SubordinateWorker, 
+  adminCrudAPI
 } from "../../lib/api";
 import CrudModal from "./crud/crud";
 
@@ -296,81 +297,78 @@ export default function AdminPage() {
 
   // UNIVERSAL CRUD Handlers
   const handleAddNew = (tableName: string) => {
-    setSelectedTable(tableName);
-    setEditingData({});
-    setCrudModalOpen(true);
-  };
+  setSelectedTable(tableName);
+  setEditingData({});
+  setCrudModalOpen(true);
+};
 
-  const handleEdit = (tableName: string, row: any) => {
-    setSelectedTable(tableName);
-    setEditingData(row);
-    setCrudModalOpen(true);
-  };
+const handleEdit = (tableName: string, row: any) => {
+  setSelectedTable(tableName);
+  setEditingData(row);
+  setCrudModalOpen(true);
+};
 
-  // Universal handleSave for ALL tables
-  const handleSave = async (data: any) => {
-    setCrudLoading(true);
-    try {
-      const isEditing = editingData && editingData.id;
-      
-      console.log('🔄 Universal CRUD Operation Started:', {
-        table: selectedTable,
-        isEditing,
-        editingData,
-        formData: data
-      });
+// Fixed handleSave - uses selectedUserId instead of row ID
+const handleSave = async (data: any) => {
+  setCrudLoading(true);
+  try {
+    const isEditing = editingData && editingData.id;
+    
+    console.log('🔄 Admin CRUD Operation Started:', {
+      table: selectedTable,
+      targetUserId: selectedUserId,
+      isEditing,
+      editingData,
+      formData: data
+    });
 
-      let result: any;
+    let result: any;
 
-      if (isEditing) {
-        result = await universalCrudAPI.update(selectedTable, editingData.id, data);
-        console.log('✅ Update result:', result);
-      } else {
-        result = await universalCrudAPI.create(selectedTable, data);
-        console.log('✅ Create result:', result);
-      }
-
-      console.log('🔄 Refreshing tenant data...');
-      // Refresh the tenant data
-      if (selectedUserId) {
-        const refreshedData = await adminAPI.getTenantTable(selectedUserId, selectedTable);
-        console.log('✅ Refreshed data:', refreshedData);
-        setTenantData(prev => ({ ...prev, [selectedTable]: refreshedData }));
-      }
-
-      alert(result.message || `${selectedTable} ${isEditing ? 'updated' : 'created'} successfully!`);
-      console.log('✅ Universal CRUD Operation Completed Successfully');
-      
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      console.error('❌ Universal CRUD Operation Failed:', errorMessage);
-      alert('Failed to save data: ' + errorMessage);
-    } finally {
-      setCrudLoading(false);
+    if (isEditing) {
+      result = await adminCrudAPI.update(selectedUserId!, selectedTable, editingData.id, data);
+    } else {
+      result = await adminCrudAPI.create(selectedUserId!, selectedTable, data);
     }
-  };
 
-  // Universal handleDelete for ALL tables
-  const handleDelete = async (id: number) => {
-    setCrudLoading(true);
-    try {
-      await universalCrudAPI.delete(selectedTable, id);
+    console.log('✅ Operation result:', result);
 
-      // Refresh the tenant data
-      if (selectedUserId) {
-        const refreshedData = await adminAPI.getTenantTable(selectedUserId, selectedTable);
-        setTenantData(prev => ({ ...prev, [selectedTable]: refreshedData }));
-      }
-
-      alert(`${selectedTable} deleted successfully!`);
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      console.error('Error deleting data:', errorMessage);
-      alert('Failed to delete data: ' + errorMessage);
-    } finally {
-      setCrudLoading(false);
+    // Refresh the tenant data
+    if (selectedUserId) {
+      const refreshedData = await adminAPI.getTenantTable(selectedUserId, selectedTable);
+      setTenantData(prev => ({ ...prev, [selectedTable]: refreshedData }));
     }
-  };
+
+    alert(result.message || `${selectedTable} ${isEditing ? 'updated' : 'created'} successfully!`);
+    
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    console.error('❌ Operation Failed:', errorMessage);
+    alert('Failed to save data: ' + errorMessage);
+  } finally {
+    setCrudLoading(false);
+  }
+};
+
+const handleDelete = async (id: number) => {
+  setCrudLoading(true);
+  try {
+    await adminCrudAPI.delete(selectedUserId!, selectedTable, id);
+
+    // Refresh the tenant data
+    if (selectedUserId) {
+      const refreshedData = await adminAPI.getTenantTable(selectedUserId, selectedTable);
+      setTenantData(prev => ({ ...prev, [selectedTable]: refreshedData }));
+    }
+
+    alert(`${selectedTable} deleted successfully!`);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    console.error('Error deleting data:', errorMessage);
+    alert('Failed to delete data: ' + errorMessage);
+  } finally {
+    setCrudLoading(false);
+  }
+};
 
   // Toggle folder expansion
   const toggleFolder = (folderPath: string) => {

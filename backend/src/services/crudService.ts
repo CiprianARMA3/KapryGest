@@ -1,16 +1,35 @@
 import { MikroORM } from '@mikro-orm/postgresql';
 import usersConfig from '../config/users-orm.config';
 
+// services/crudService.ts - Add logging
 export class CrudService {
-  static async executeQuery(userId: number, query: string, params: any[] = []) {
-    const usersOrm = await MikroORM.init(usersConfig);
-    const conn = usersOrm.em.getConnection();
-    
+  static async executeQuery(userId: number, query: string, params: any[] = []): Promise<any> {
     try {
+      console.log('📊 CrudService executing query:', {
+        userId,
+        query,
+        params
+      });
+
+      const usersOrm = await MikroORM.init(usersConfig);
+      const conn = usersOrm.em.getConnection();
+      
       const result = await conn.execute(query, params);
-      return result;
-    } finally {
+      
+      console.log('📊 CrudService query result:', {
+        rowsAffected: result.length,
+        result: result
+      });
+      
       await usersOrm.close();
+      return result;
+    } catch (error) {
+      console.error('❌ CrudService query failed:', {
+        error: getErrorMessage(error),
+        query,
+        params
+      });
+      throw error;
     }
   }
 
@@ -22,4 +41,8 @@ export class CrudService {
     );
     return result[0].exists;
   }
+}
+
+function getErrorMessage(error: unknown) {
+  throw new Error('Function not implemented.');
 }

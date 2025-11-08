@@ -312,6 +312,7 @@ class ApiClient {
       throw error;
     }
   }
+  
 
   async get<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint);
@@ -566,6 +567,29 @@ export const fileUtils = {
     return ext.toUpperCase();
   }
 };
+
+export const adminCrudAPI = {
+  // Generic CRUD operations
+  create: (userId: number, table: string, data: any) => 
+    apiClient.post<{ message: string; [key: string]: any }>(`/admin/crud/${userId}/${table}`, data),
+  
+  update: (userId: number, table: string, id: number, data: any) => 
+    apiClient.put<{ message: string; [key: string]: any }>(`/admin/crud/${userId}/${table}/${id}`, data),
+  
+  delete: (userId: number, table: string, id: number) => 
+    apiClient.delete<{ message: string }>(`/admin/crud/${userId}/${table}/${id}`),
+  
+  // Specific subordinate worker operations (if you create the specialized routes)
+  createSubordinateWorker: (userId: number, data: any) => 
+    apiClient.post<{ message: string; subordinateworker: any }>(`/admin/crud/${userId}/subordinateworkers`, data),
+  
+  updateSubordinateWorker: (userId: number, id: number, data: any) => 
+    apiClient.put<{ message: string; subordinateworker: any }>(`/admin/crud/${userId}/subordinateworkers/${id}`, data),
+  
+  deleteSubordinateWorker: (userId: number, id: number) => 
+    apiClient.delete<{ message: string }>(`/admin/crud/${userId}/subordinateworkers/${id}`),
+};
+
 
 // Export everything for convenience
 export default {

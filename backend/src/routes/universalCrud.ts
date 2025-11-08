@@ -1,4 +1,3 @@
-// routes/universalCrud.ts
 import { Router, Request, Response } from 'express';
 import { authenticateToken, checkSuspended } from '../middleware/auth';
 import { UniversalCrudService } from '../services/universalCrudService';
@@ -22,10 +21,10 @@ function getErrorMessage(error: unknown): string {
   return 'An unknown error occurred';
 }
 
-// GET all records from a table
+// GET all records from a table - NOW USES AUTHENTICATED USER ID
 router.get('/:table', authenticateToken, checkSuspended, async (req: any, res: Response) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id; // This is the authenticated user's ID
     const table = req.params.table;
     
     if (!SUPPORTED_TABLES.includes(table)) {
@@ -49,10 +48,10 @@ router.get('/:table', authenticateToken, checkSuspended, async (req: any, res: R
   }
 });
 
-// GET single record by ID
+// GET single record by ID - NOW USES AUTHENTICATED USER ID
 router.get('/:table/:id', authenticateToken, checkSuspended, async (req: any, res: Response) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id; // This is the authenticated user's ID
     const table = req.params.table;
     const id = Number(req.params.id);
     
@@ -74,10 +73,10 @@ router.get('/:table/:id', authenticateToken, checkSuspended, async (req: any, re
   }
 });
 
-// CREATE new record
+// CREATE new record - NOW USES AUTHENTICATED USER ID
 router.post('/:table', authenticateToken, checkSuspended, async (req: any, res: Response) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id; // This is the authenticated user's ID
     const table = req.params.table;
     const data = req.body;
     
@@ -102,10 +101,10 @@ router.post('/:table', authenticateToken, checkSuspended, async (req: any, res: 
   }
 });
 
-// UPDATE record
+// UPDATE record - NOW USES AUTHENTICATED USER ID
 router.put('/:table/:id', authenticateToken, checkSuspended, async (req: any, res: Response) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id; // This is the authenticated user's ID
     const table = req.params.table;
     const id = Number(req.params.id);
     const data = req.body;
@@ -131,10 +130,10 @@ router.put('/:table/:id', authenticateToken, checkSuspended, async (req: any, re
   }
 });
 
-// DELETE record
+// DELETE record - NOW USES AUTHENTICATED USER ID
 router.delete('/:table/:id', authenticateToken, checkSuspended, async (req: any, res: Response) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id; // This is the authenticated user's ID
     const table = req.params.table;
     const id = Number(req.params.id);
     

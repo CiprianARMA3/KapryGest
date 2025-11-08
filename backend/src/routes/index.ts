@@ -8,7 +8,7 @@ import paymentRoutes from './payments';
 import subscriptionRoutes from './subscriptions';
 import fileRoutes from './files';
 import universalCrudRoutes from './universalCrud'; // Add this
-
+import adminCrudRoutes from './adminCrud'; // Add this
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -21,5 +21,6 @@ router.use('/files', fileRoutes);
 
 // Universal CRUD routes for all tables
 router.use('/crud', universalCrudRoutes);
+router.use('/admin/crud', adminCrudRoutes);
 
 export default router;
