@@ -1,5 +1,6 @@
 // services/universalCrudService.ts
 import { CrudService } from './crudService';
+import { AuthService } from './authService';
 
 export interface TableColumnInfo {
   column_name: string;
@@ -92,76 +93,93 @@ export class UniversalCrudService {
   /**
    * Create a new record
    */
-// services/universalCrudService.ts - UPDATED createRecord method
-static async createRecord(userId: number, table: string, data: any): Promise<CrudResult> {
-  try {
-    const tableName = `${table}_${userId}`;
-    
-    console.log('🔍 Universal CRUD - Starting create record:', {
-      userId,
-      table,
-      tableName,
-      inputData: data
-    });
+  static async createRecord(userId: number, table: string, data: any): Promise<CrudResult> {
+    try {
+      const tableName = `${table}_${userId}`;
+      
+      console.log('🔍 Universal CRUD - Starting create record:', {
+        userId,
+        table,
+        tableName,
+        inputData: data
+      });
 
-    // Get table structure to validate columns
-    const tableStructure = await this.getTableStructure(userId, table);
-    const existingColumns = tableStructure.map(col => col.column_name);
-    
-    console.log('🔍 Table structure:', {
-      tableName,
-      existingColumns,
-      tableStructure
-    });
-    
-    // Filter out columns that don't exist in the table and remove undefined values
-    const validData: any = {};
-    for (const [key, value] of Object.entries(data)) {
-      if (existingColumns.includes(key) && value !== undefined && value !== null && value !== '') {
-        validData[key] = value;
+      // Get table structure to validate columns
+      const tableStructure = await this.getTableStructure(userId, table);
+      const existingColumns = tableStructure.map(col => col.column_name);
+      
+      console.log('🔍 Table structure:', {
+        tableName,
+        existingColumns,
+        tableStructure
+      });
+      
+      // Filter out columns that don't exist in the table and remove undefined values
+      const validData: any = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (existingColumns.includes(key) && value !== undefined && value !== null && value !== '') {
+          validData[key] = value;
+        }
       }
+
+      // Remove ID if present (should be auto-generated)
+      delete validData.id;
+      delete validData.created_at;
+      delete validData.updated_at;
+
+      // Add user_id if the table has this column and it's not already set
+      if (existingColumns.includes('user_id') && !validData.user_id) {
+        validData.user_id = userId;
+        console.log('✅ Auto-added user_id:', userId);
+      }
+
+      // Add is_active if the table has this column and it's not already set
+      if (existingColumns.includes('is_active') && validData.is_active === undefined) {
+        validData.is_active = true;
+        console.log('✅ Auto-added is_active: true');
+      }
+
+      // Hash password if present (for subordinate workers)
+      if (validData.password && table === 'subordinateworkers') {
+        validData.password = await AuthService.hashPassword(validData.password);
+        console.log('✅ Password hashed');
+      }
+
+      console.log('🔍 Filtered valid data:', validData);
+
+      if (Object.keys(validData).length === 0) {
+        console.warn('❌ No valid data after filtering');
+        return { success: false, error: 'No valid data provided for insertion' };
+      }
+
+      const columns = Object.keys(validData);
+      const values = Object.values(validData);
+      const placeholders = columns.map(() => '?').join(', ');
+
+      const query = `INSERT INTO ${tableName} (${columns.join(', ')}) 
+                     VALUES (${placeholders}) RETURNING *`;
+
+      console.log('🚀 Final INSERT query:', { query, values });
+
+      const result = await CrudService.executeQuery(userId, query, values);
+      
+      console.log('✅ INSERT successful:', result);
+      
+      return { 
+        success: true, 
+        data: result[0],
+        message: `${table} created successfully`
+      };
+    } catch (error) {
+      const errorMessage = this.getErrorMessage(error);
+      console.error('❌ INSERT failed:', {
+        error: errorMessage,
+        table: `${table}_${userId}`,
+        data
+      });
+      return { success: false, error: `Failed to create ${table}: ${errorMessage}` };
     }
-
-    // Remove ID if present (should be auto-generated)
-    delete validData.id;
-    delete validData.created_at;
-    delete validData.updated_at;
-
-    console.log('🔍 Filtered valid data:', validData);
-
-    if (Object.keys(validData).length === 0) {
-      console.warn('❌ No valid data after filtering');
-      return { success: false, error: 'No valid data provided for insertion' };
-    }
-
-    const columns = Object.keys(validData);
-    const values = Object.values(validData);
-    const placeholders = columns.map(() => '?').join(', ');
-
-    const query = `INSERT INTO ${tableName} (${columns.join(', ')}) 
-                   VALUES (${placeholders}) RETURNING *`;
-
-    console.log('🚀 Final INSERT query:', { query, values });
-
-    const result = await CrudService.executeQuery(userId, query, values);
-    
-    console.log('✅ INSERT successful:', result);
-    
-    return { 
-      success: true, 
-      data: result[0],
-      message: `${table} created successfully`
-    };
-  } catch (error) {
-    const errorMessage = this.getErrorMessage(error);
-    console.error('❌ INSERT failed:', {
-      error: errorMessage,
-      table: `${table}_${userId}`,
-      data
-    });
-    return { success: false, error: `Failed to create ${table}: ${errorMessage}` };
   }
-}
 
   /**
    * Update an existing record
@@ -184,11 +202,17 @@ static async createRecord(userId: number, table: string, data: any): Promise<Cru
       const validData: any = {};
       for (const [key, value] of Object.entries(data)) {
         if (existingColumns.includes(key) && 
-            !['id', 'created_at'].includes(key) && 
+            !['id', 'created_at', 'user_id'].includes(key) && 
             value !== undefined && 
             value !== null) {
           validData[key] = value;
         }
+      }
+
+      // Hash password if present and being updated (for subordinate workers)
+      if (validData.password && table === 'subordinateworkers') {
+        validData.password = await AuthService.hashPassword(validData.password);
+        console.log('✅ Password hashed for update');
       }
 
       if (Object.keys(validData).length === 0) {

@@ -1,6 +1,17 @@
 import { MikroORM } from '@mikro-orm/postgresql';
 import usersConfig from '../config/users-orm.config';
 
+// Helper function to safely extract error messages
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'An unknown error occurred';
+}
+
 // services/crudService.ts - Add logging
 export class CrudService {
   static async executeQuery(userId: number, query: string, params: any[] = []): Promise<any> {
@@ -41,8 +52,4 @@ export class CrudService {
     );
     return result[0].exists;
   }
-}
-
-function getErrorMessage(error: unknown) {
-  throw new Error('Function not implemented.');
 }
