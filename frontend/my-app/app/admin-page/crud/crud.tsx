@@ -145,8 +145,8 @@ const CrudModal: React.FC<CrudModalProps> = ({
       value: value,
       onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => 
         handleInputChange(field.name, e.target.value),
-      className: `w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-        errors[field.name] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+      className: `input input-bordered w-full ${
+        errors[field.name] ? 'input-error' : ''
       }`,
       required: field.required,
       placeholder: field.placeholder || `Enter ${field.label.toLowerCase()}`
@@ -170,7 +170,9 @@ const CrudModal: React.FC<CrudModalProps> = ({
           <textarea
             {...commonProps}
             rows={4}
-            className={`${commonProps.className} resize-vertical`}
+            className={`textarea textarea-bordered w-full ${
+              errors[field.name] ? 'textarea-error' : ''
+            }`}
           />
         );
       
@@ -216,70 +218,72 @@ const CrudModal: React.FC<CrudModalProps> = ({
   return (
     <>
       {/* Main Modal */}
-      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-800">
+      <div className="modal modal-open">
+        <div className="modal-box max-w-4xl max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-between items-center pb-4 border-b border-base-300">
+            <h2 className="text-xl font-semibold text-base-content">
               {isEditing ? 'Edit' : 'Add New'} {tableName}
             </h2>
             <button
               onClick={onClose}
               disabled={loading}
-              className="text-gray-500 hover:text-gray-700 text-lg font-bold hover:bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center transition-colors"
+              className="btn btn-sm btn-circle btn-ghost text-base-content hover:bg-base-300 transition-colors"
             >
               ✕
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <form onSubmit={handleSubmit} className="pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               {fields.map(field => (
                 <div key={field.name} className={`${
                   field.type === 'textarea' ? 'md:col-span-2' : ''
                 }`}>
-                  <label htmlFor={field.name} className="block text-sm font-medium text-gray-700 mb-2">
-                    {field.label}
-                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                  <label htmlFor={field.name} className="label">
+                    <span className="label-text text-base-content">
+                      {field.label}
+                      {field.required && <span className="text-error ml-1">*</span>}
+                    </span>
                   </label>
                   {renderField(field)}
                   {errors[field.name] && (
-                    <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+                    <p className="text-error text-xs mt-1">{errors[field.name]}</p>
                   )}
                 </div>
               ))}
             </div>
 
-            <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+            <div className="flex justify-between items-center pt-4 border-t border-base-300">
               <div>
                 {isEditing && allowDelete && onDelete && (
                   <button
                     type="button"
                     onClick={() => setShowDeleteConfirm(true)}
                     disabled={loading}
-                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors disabled:opacity-50"
+                    className="btn btn-error btn-sm text-white"
                   >
                     Delete
                   </button>
                 )}
               </div>
               
-              <div className="flex space-x-3">
+              <div className="flex space-x-2">
                 <button
                   type="button"
                   onClick={onClose}
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50"
+                  className="btn btn-ghost btn-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 flex items-center"
+                  className="btn btn-primary btn-sm"
                 >
                   {loading ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      <span className="loading loading-spinner loading-sm"></span>
                       {isEditing ? 'Updating...' : 'Creating...'}
                     </>
                   ) : (
@@ -294,39 +298,37 @@ const CrudModal: React.FC<CrudModalProps> = ({
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-60">
-          <div className="bg-white rounded-xl w-full max-w-md">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                Confirm Deletion
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete this {tableName.toLowerCase()}? This action cannot be undone.
-              </p>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors disabled:opacity-50 flex items-center"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Deleting...
-                    </>
-                  ) : (
-                    'Delete'
-                  )}
-                </button>
-              </div>
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="text-lg font-semibold text-base-content mb-2">
+              Confirm Deletion
+            </h3>
+            <p className="text-base-content/70 mb-6">
+              Are you sure you want to delete this {tableName.toLowerCase()}? This action cannot be undone.
+            </p>
+            
+            <div className="modal-action">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={loading}
+                className="btn btn-ghost"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={loading}
+                className="btn btn-error text-white"
+              >
+                {loading ? (
+                  <>
+                    <span className="loading loading-spinner loading-sm"></span>
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </button>
             </div>
           </div>
         </div>

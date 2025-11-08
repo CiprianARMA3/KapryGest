@@ -94,8 +94,8 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
       { name: 'name', type: 'text', label: 'Product Name', required: true, placeholder: 'Enter product name' },
       { name: 'category', type: 'text', label: 'Category', required: true, placeholder: 'Enter category' },
       { name: 'price', type: 'number', label: 'Price', required: true, placeholder: '0.00' },
-      { name: 'reduced_percentage', type: 'number', label: 'Discount %', required: false, placeholder: '0' },
-      { name: 'description', type: 'textarea', label: 'Description', required: false, placeholder: 'Enter product description' },
+      { name: 'reduced_percentage', type: 'number', label: 'Discount %', required: true, placeholder: '0' },
+      { name: 'description', type: 'textarea', label: 'Description', required: true, placeholder: 'Enter product description' },
       { name: 'data', type: 'textarea', label: 'Additional Data (JSON)', required: false, placeholder: 'Enter additional data as JSON' }
     ]
   },
@@ -155,7 +155,7 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
     fields: [
       { name: 'id', type: 'number', label: 'ID', required: true, placeholder: 'ID' },
       { name: 'invoice_id', type: 'number', label: 'Invoice ID', required: true, placeholder: 'Enter invoice ID' },
-      { name: 'invoice_date', type: 'date', label: 'Invoice Date', required: false, placeholder: 'Select invoice date' },
+      { name: 'invoice_date', type: 'date', label: 'Invoice Date', required: true, placeholder: 'Select invoice date' },
       { name: 'status', type: 'select', label: 'Status', required: true,
         options: [
           { value: 'completed', label: 'Completed' },
@@ -164,7 +164,7 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
           { value: 'refunded', label: 'Refunded' }
         ]
       },
-      { name: 'payment_date', type: 'date', label: 'Payment Date', required: false, placeholder: 'Select payment date' },
+      { name: 'payment_date', type: 'date', label: 'Payment Date', required: true, placeholder: 'Select payment date' },
       { name: 'payment_method', type: 'select', label: 'Payment Method', required: true,
         options: [
           { value: 'credit_card', label: 'Credit Card' },
@@ -173,13 +173,13 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
           { value: 'paypal', label: 'PayPal' }
         ]
       },
-      { name: 'payment_type', type: 'text', label: 'Payment Type', required: false, placeholder: 'Enter payment type' },
-      { name: 'price', type: 'number', label: 'Price', required: false, placeholder: 'Enter price' },
+      { name: 'payment_type', type: 'text', label: 'Payment Type', required: true, placeholder: 'Enter payment type' },
+      { name: 'price', type: 'number', label: 'Price', required: true, placeholder: 'Enter price' },
       { name: 'amount', type: 'number', label: 'Amount', required: true, placeholder: 'Enter payment amount' },
-      { name: 'billing_address', type: 'textarea', label: 'Billing Address', required: false, placeholder: 'Enter billing address' },
-      { name: 'phone_number', type: 'text', label: 'Phone Number', required: false, placeholder: 'Enter phone number' },
-      { name: 'transaction_id', type: 'text', label: 'Transaction ID', required: false, placeholder: 'Enter transaction ID' },
-      { name: 'data_invoices', type: 'textarea', label: 'Invoice Data (JSON)', required: false, placeholder: 'Enter invoice data as JSON' }
+      { name: 'billing_address', type: 'textarea', label: 'Billing Address', required: true, placeholder: 'Enter billing address' },
+      { name: 'phone_number', type: 'text', label: 'Phone Number', required: true, placeholder: 'Enter phone number' },
+      { name: 'transaction_id', type: 'text', label: 'Transaction ID', required: true, placeholder: 'Enter transaction ID' },
+      { name: 'data_invoices', type: 'textarea', label: 'Invoice Data (JSON)', required: true, placeholder: 'Enter invoice data as JSON' }
     ]
   },
   subordinateworkers: {
@@ -194,8 +194,8 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
       { name: 'permissions', type: 'textarea', label: 'Permissions (JSON)', required: false, placeholder: 'Enter permissions as JSON' },
       { name: 'logs', type: 'textarea', label: 'Logs (JSON)', required: false, placeholder: 'Enter logs as JSON' },
       // { name: 'user_id', type: 'number', label: 'User ID', required: false, placeholder: 'Enter user ID' },
-      { name: 'is_active', type: 'text', label: 'Is Active', required: false, placeholder: 'Enter active status (true/false)' },
-      { name: 'created_at', type: 'date', label: 'Created At', required: false, placeholder: 'Select creation date' }
+      { name: 'is_active', type: 'text', label: 'Is Active', required: true, placeholder: 'Enter active status (true/false)' },
+      { name: 'created_at', type: 'date', label: 'Created At', required: true, placeholder: 'Select creation/update date' }
     ]
   }
 };
@@ -1085,7 +1085,7 @@ const handleSave = async (data: any) => {
                                 <th>Phone</th>
                                 <th>Role</th>
                                 <th>Created</th>
-                                <th>Actions</th>
+                                {/* <th>Actions</th> */}
                               </tr>
                             </thead>
                             <tbody>
@@ -1100,9 +1100,9 @@ const handleSave = async (data: any) => {
                                   <td className="py-3 px-4 text-sm">
                                     {new Date(worker.created_at).toLocaleDateString()}
                                   </td>
-                                  <td className="py-3 px-4 text-sm">
+                                  {/* <td className="py-3 px-4 text-sm">
                                     {renderTableActions('subordinateworkers', worker)}
-                                  </td>
+                                  </td> */}
                                 </tr>
                               ))}
                             </tbody>
