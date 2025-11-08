@@ -6,7 +6,6 @@ import {
   adminAPI, 
   filesAPI, 
   fileUtils,
-  universalCrudAPI,
   type User,
   type FileItem,
   type FileContent,
@@ -14,6 +13,7 @@ import {
   adminCrudAPI
 } from "../../lib/api";
 import CrudModal from "./crud/crud";
+import './styles/styles.css';
 
 interface TableField {
   name: string;
@@ -37,6 +37,8 @@ const getErrorMessage = (error: unknown): string => {
 
 export default function AdminPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentSection, setCurrentSection] = useState('dashboard');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [search, setSearch] = useState("");
@@ -73,100 +75,113 @@ export default function AdminPage() {
   const [crudLoading, setCrudLoading] = useState(false);
 
   // Table configurations for all tables
-  const tableConfigs: Record<string, { fields: TableField[] }> = {
-    customers: {
-      fields: [
-        { name: 'name', type: 'text', label: 'First Name', required: true, placeholder: 'Enter first name' },
-        { name: 'surname', type: 'text', label: 'Last Name', required: true, placeholder: 'Enter last name' },
-        { name: 'email', type: 'email', label: 'Email', placeholder: 'Enter email address' },
-        { name: 'phone_number', type: 'text', label: 'Phone Number', placeholder: 'Enter phone number' },
-        { name: 'billing_address', type: 'textarea', label: 'Billing Address', placeholder: 'Enter billing address' }
-      ]
-    },
-    products: {
-      fields: [
-        { name: 'name', type: 'text', label: 'Product Name', required: true, placeholder: 'Enter product name' },
-        { name: 'category', type: 'text', label: 'Category', required: true, placeholder: 'Enter category' },
-        { name: 'price', type: 'number', label: 'Price', required: true, placeholder: '0.00' },
-        { name: 'reduced_percentage', type: 'number', label: 'Discount %', placeholder: '0' },
-        { name: 'description', type: 'textarea', label: 'Description', placeholder: 'Enter product description' }
-      ]
-    },
-    orders: {
-      fields: [
-        { name: 'product_id', type: 'number', label: 'Product ID', required: true, placeholder: 'Enter product ID' },
-        { name: 'quantity', type: 'number', label: 'Quantity', required: true, placeholder: 'Enter quantity' },
-        { name: 'TVA', type: 'number', label: 'TVA', placeholder: 'Enter TVA' },
-        { name: 'total', type: 'number', label: 'Total', required: true, placeholder: 'Enter total amount' },
-        { name: 'status', type: 'select', label: 'Status', required: true, 
-          options: [
-            { value: 'pending', label: 'Pending' },
-            { value: 'processing', label: 'Processing' },
-            { value: 'completed', label: 'Completed' },
-            { value: 'cancelled', label: 'Cancelled' }
-          ]
-        }
-      ]
-    },
-    stocks: {
-      fields: [
-        { name: 'product_id', type: 'number', label: 'Product ID', required: true, placeholder: 'Enter product ID' },
-        { name: 'quantity', type: 'number', label: 'Quantity', required: true, placeholder: 'Enter quantity' },
-        { name: 'location', type: 'text', label: 'Location', placeholder: 'Enter storage location' },
-        { name: 'minimum_stock', type: 'number', label: 'Minimum Stock', placeholder: 'Enter minimum stock level' }
-      ]
-    },
-    invoices: {
-      fields: [
-        { name: 'order_id', type: 'number', label: 'Order ID', required: true, placeholder: 'Enter order ID' },
-        { name: 'customer_id', type: 'number', label: 'Customer ID', placeholder: 'Enter customer ID' },
-        { name: 'total_amount', type: 'number', label: 'Total Amount', required: true, placeholder: 'Enter total amount' },
-        { name: 'issue_date', type: 'date', label: 'Issue Date', placeholder: 'Select issue date' },
-        { name: 'due_date', type: 'date', label: 'Due Date', placeholder: 'Select due date' },
-        { name: 'status', type: 'select', label: 'Status', required: true,
-          options: [
-            { value: 'pending', label: 'Pending' },
-            { value: 'paid', label: 'Paid' },
-            { value: 'overdue', label: 'Overdue' },
-            { value: 'cancelled', label: 'Cancelled' }
-          ]
-        }
-      ]
-    },
-    paymentlogs: {
-      fields: [
-        { name: 'invoice_id', type: 'number', label: 'Invoice ID', required: true, placeholder: 'Enter invoice ID' },
-        { name: 'amount', type: 'number', label: 'Amount', required: true, placeholder: 'Enter payment amount' },
-        { name: 'payment_method', type: 'select', label: 'Payment Method', required: true,
-          options: [
-            { value: 'credit_card', label: 'Credit Card' },
-            { value: 'bank_transfer', label: 'Bank Transfer' },
-            { value: 'cash', label: 'Cash' },
-            { value: 'paypal', label: 'PayPal' }
-          ]
-        },
-        { name: 'transaction_id', type: 'text', label: 'Transaction ID', placeholder: 'Enter transaction ID' },
-        { name: 'status', type: 'select', label: 'Status', required: true,
-          options: [
-            { value: 'completed', label: 'Completed' },
-            { value: 'failed', label: 'Failed' },
-            { value: 'pending', label: 'Pending' },
-            { value: 'refunded', label: 'Refunded' }
-          ]
-        }
-      ]
-    },
-    subordinateworkers: {
-      fields: [
-        { name: 'name', type: 'text', label: 'First Name', required: true, placeholder: 'Enter first name' },
-        { name: 'surname', type: 'text', label: 'Last Name', required: true, placeholder: 'Enter last name' },
-        { name: 'email', type: 'email', label: 'Email', required: true, placeholder: 'Enter email address' },
-        { name: 'phone_number', type: 'text', label: 'Phone Number', required: true, placeholder: 'Enter phone number' },
-        { name: 'role', type: 'text', label: 'Role', required: true, placeholder: 'Enter role' },
-        { name: 'password', type: 'password', label: 'Password', required: true, placeholder: 'Enter password' }
-      ]
-    }
-  };
+// Table configurations for all tables with complete required fields
+const tableConfigs: Record<string, { fields: TableField[] }> = {
+  customers: {
+    fields: [
+      { name: 'name', type: 'text', label: 'First Name', required: true, placeholder: 'Enter first name' },
+      { name: 'surname', type: 'text', label: 'Last Name', required: true, placeholder: 'Enter last name' },
+      { name: 'email', type: 'email', label: 'Email', required: true, placeholder: 'Enter email address' },
+      { name: 'phone_number', type: 'text', label: 'Phone Number', placeholder: 'Enter phone number' },
+      { name: 'billing_address', type: 'textarea', label: 'Billing Address', placeholder: 'Enter billing address' }
+    ]
+  },
+  products: {
+    fields: [
+      { name: 'name', type: 'text', label: 'Product Name', required: true, placeholder: 'Enter product name' },
+      { name: 'category', type: 'text', label: 'Category', required: true, placeholder: 'Enter category' },
+      { name: 'price', type: 'number', label: 'Price', required: true, placeholder: '0.00' },
+      { name: 'reduced_percentage', type: 'number', label: 'Discount %', placeholder: '0' },
+      { name: 'description', type: 'textarea', label: 'Description', placeholder: 'Enter product description' },
+      { name: 'data', type: 'textarea', label: 'Additional Data (JSON)', placeholder: 'Enter additional data as JSON' }
+    ]
+  },
+  orders: {
+    fields: [
+      { name: 'product_id', type: 'number', label: 'Product ID', required: true, placeholder: 'Enter product ID' },
+      { name: 'quantity', type: 'number', label: 'Quantity', required: true, placeholder: 'Enter quantity' },
+      { name: 'total', type: 'number', label: 'Total Amount', required: true, placeholder: 'Enter total amount' },
+      { name: 'status', type: 'select', label: 'Status', required: true, 
+        options: [
+          { value: 'pending', label: 'Pending' },
+          { value: 'processing', label: 'Processing' },
+          { value: 'completed', label: 'Completed' },
+          { value: 'cancelled', label: 'Cancelled' }
+        ]
+      },
+      { name: 'TVA', type: 'number', label: 'TVA', placeholder: 'Enter TVA' },
+      { name: 'data_invoices', type: 'textarea', label: 'Invoice Data (JSON)', placeholder: 'Enter invoice data as JSON' }
+    ]
+  },
+  stocks: {
+    fields: [
+      { name: 'product_id', type: 'number', label: 'Product ID', required: true, placeholder: 'Enter product ID' },
+      { name: 'quantity', type: 'number', label: 'Quantity', required: true, placeholder: 'Enter quantity' },
+      { name: 'location', type: 'text', label: 'Location', placeholder: 'Enter storage location' },
+      { name: 'minimum_stock', type: 'number', label: 'Minimum Stock', placeholder: 'Enter minimum stock level' }
+    ]
+  },
+  invoices: {
+    fields: [
+      { name: 'order_id', type: 'number', label: 'Order ID', required: true, placeholder: 'Enter order ID' },
+      { name: 'total_amount', type: 'number', label: 'Total Amount', required: true, placeholder: 'Enter total amount' },
+      { name: 'status', type: 'select', label: 'Status', required: true,
+        options: [
+          { value: 'pending', label: 'Pending' },
+          { value: 'paid', label: 'Paid' },
+          { value: 'overdue', label: 'Overdue' },
+          { value: 'cancelled', label: 'Cancelled' }
+        ]
+      },
+      { name: 'customer_id', type: 'number', label: 'Customer ID', placeholder: 'Enter customer ID' },
+      { name: 'issue_date', type: 'date', label: 'Issue Date', placeholder: 'Select issue date' },
+      { name: 'due_date', type: 'date', label: 'Due Date', placeholder: 'Select due date' }
+    ]
+  },
+  paymentlogs: {
+    fields: [
+      { name: 'invoice_id', type: 'number', label: 'Invoice ID', required: true, placeholder: 'Enter invoice ID' },
+      { name: 'amount', type: 'number', label: 'Amount', required: true, placeholder: 'Enter payment amount' },
+      { name: 'status', type: 'select', label: 'Status', required: true,
+        options: [
+          { value: 'completed', label: 'Completed' },
+          { value: 'failed', label: 'Failed' },
+          { value: 'pending', label: 'Pending' },
+          { value: 'refunded', label: 'Refunded' }
+        ]
+      },
+      { name: 'payment_method', type: 'select', label: 'Payment Method', required: true,
+        options: [
+          { value: 'credit_card', label: 'Credit Card' },
+          { value: 'bank_transfer', label: 'Bank Transfer' },
+          { value: 'cash', label: 'Cash' },
+          { value: 'paypal', label: 'PayPal' }
+        ]
+      },
+      { name: 'transaction_id', type: 'text', label: 'Transaction ID', placeholder: 'Enter transaction ID' }
+    ]
+  },
+  subordinateworkers: {
+    fields: [
+      { name: 'name', type: 'text', label: 'First Name', required: true, placeholder: 'Enter first name' },
+      { name: 'surname', type: 'text', label: 'Last Name', required: true, placeholder: 'Enter last name' },
+      { name: 'email', type: 'email', label: 'Email', required: true, placeholder: 'Enter email address' },
+      { name: 'phone_number', type: 'text', label: 'Phone Number', required: true, placeholder: 'Enter phone number' },
+      { name: 'role', type: 'text', label: 'Role', required: true, placeholder: 'Enter role' },
+      { name: 'password', type: 'password', label: 'Password', required: true, placeholder: 'Enter password' },
+      { name: 'permissions', type: 'textarea', label: 'Permissions (JSON)', placeholder: 'Enter permissions as JSON' },
+      { name: 'logs', type: 'textarea', label: 'Logs (JSON)', placeholder: 'Enter logs as JSON' }
+    ]
+  }
+};
+
+  // Menu sections
+  const menuSections = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'users', label: 'Users Management', icon: '👥' },
+    { id: 'files', label: 'File Explorer', icon: '📁' },
+    { id: 'database', label: 'Database Tables', icon: '🗃️' },
+  ];
 
   // Fetch current admin user
   useEffect(() => {
@@ -297,37 +312,59 @@ export default function AdminPage() {
 
   // UNIVERSAL CRUD Handlers
   const handleAddNew = (tableName: string) => {
-  setSelectedTable(tableName);
-  setEditingData({});
-  setCrudModalOpen(true);
-};
+    setSelectedTable(tableName);
+    setEditingData({});
+    setCrudModalOpen(true);
+  };
 
-const handleEdit = (tableName: string, row: any) => {
-  setSelectedTable(tableName);
-  setEditingData(row);
-  setCrudModalOpen(true);
-};
+  const handleEdit = (tableName: string, row: any) => {
+    setSelectedTable(tableName);
+    setEditingData(row);
+    setCrudModalOpen(true);
+  };
 
-// Fixed handleSave - uses selectedUserId instead of row ID
 const handleSave = async (data: any) => {
   setCrudLoading(true);
   try {
     const isEditing = editingData && editingData.id;
     
+    // Process the data before sending - handle JSON fields
+    const processedData = { ...data };
+    
+    // Process JSON fields
+    const jsonFields = ['data', 'data_invoices', 'permissions', 'logs'];
+    jsonFields.forEach(field => {
+      if (processedData[field] && typeof processedData[field] === 'string') {
+        try {
+          processedData[field] = JSON.parse(processedData[field]);
+        } catch (error) {
+          console.warn(`Failed to parse ${field} as JSON, keeping as string`);
+        }
+      }
+    });
+
+    // Handle numeric fields
+    const numericFields = ['product_id', 'quantity', 'price', 'total', 'TVA', 'total_amount', 'amount', 'minimum_stock', 'reduced_percentage'];
+    numericFields.forEach(field => {
+      if (processedData[field] !== undefined && processedData[field] !== null) {
+        processedData[field] = Number(processedData[field]);
+      }
+    });
+
     console.log('🔄 Admin CRUD Operation Started:', {
       table: selectedTable,
       targetUserId: selectedUserId,
       isEditing,
       editingData,
-      formData: data
+      processedData
     });
 
     let result: any;
 
     if (isEditing) {
-      result = await adminCrudAPI.update(selectedUserId!, selectedTable, editingData.id, data);
+      result = await adminCrudAPI.update(selectedUserId!, selectedTable, editingData.id, processedData);
     } else {
-      result = await adminCrudAPI.create(selectedUserId!, selectedTable, data);
+      result = await adminCrudAPI.create(selectedUserId!, selectedTable, processedData);
     }
 
     console.log('✅ Operation result:', result);
@@ -349,26 +386,26 @@ const handleSave = async (data: any) => {
   }
 };
 
-const handleDelete = async (id: number) => {
-  setCrudLoading(true);
-  try {
-    await adminCrudAPI.delete(selectedUserId!, selectedTable, id);
+  const handleDelete = async (id: number) => {
+    setCrudLoading(true);
+    try {
+      await adminCrudAPI.delete(selectedUserId!, selectedTable, id);
 
-    // Refresh the tenant data
-    if (selectedUserId) {
-      const refreshedData = await adminAPI.getTenantTable(selectedUserId, selectedTable);
-      setTenantData(prev => ({ ...prev, [selectedTable]: refreshedData }));
+      // Refresh the tenant data
+      if (selectedUserId) {
+        const refreshedData = await adminAPI.getTenantTable(selectedUserId, selectedTable);
+        setTenantData(prev => ({ ...prev, [selectedTable]: refreshedData }));
+      }
+
+      alert(`${selectedTable} deleted successfully!`);
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      console.error('Error deleting data:', errorMessage);
+      alert('Failed to delete data: ' + errorMessage);
+    } finally {
+      setCrudLoading(false);
     }
-
-    alert(`${selectedTable} deleted successfully!`);
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    console.error('Error deleting data:', errorMessage);
-    alert('Failed to delete data: ' + errorMessage);
-  } finally {
-    setCrudLoading(false);
-  }
-};
+  };
 
   // Toggle folder expansion
   const toggleFolder = (folderPath: string) => {
@@ -585,35 +622,33 @@ const handleDelete = async (id: number) => {
     return files.map((item, index) => (
       <div key={`${item.path}-${index}`}>
         <div 
-          className={`flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors ${
+          className={`flex items-center justify-between p-3 border rounded-lg hover:bg-base-200 transition-colors ${
             depth > 0 ? 'ml-6' : ''
-          } ${item.isDirectory ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'}`}
+          } ${item.isDirectory ? 'bg-primary/10 border-primary/20' : 'bg-base-100 border-base-300'}`}
         >
           <div className="flex items-center space-x-3 flex-1">
             {item.isDirectory && (
               <button
                 onClick={() => toggleFolder(item.path)}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
+                className="text-base-content/70 hover:text-base-content transition-colors"
               >
                 {expandedFolders.has(item.path) ? '▼' : '►'}
               </button>
             )}
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-              item.isDirectory ? 'bg-blue-100' : 'bg-gray-100'
+              item.isDirectory ? 'bg-primary text-primary-content' : 'bg-base-300 text-base-content'
             }`}>
-              <span className={`text-sm ${
-                item.isDirectory ? 'text-blue-600' : 'text-gray-600'
-              }`}>
+              <span className="text-sm">
                 {fileUtils.getFileIcon(item.name, item.isDirectory)}
               </span>
             </div>
             <div className="flex-1">
               <span className={`font-mono text-sm ${
-                item.isDirectory ? 'text-blue-800 font-medium' : 'text-gray-800'
+                item.isDirectory ? 'text-primary font-medium' : 'text-base-content'
               }`}>
                 {item.name}
               </span>
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-base-content/70 mt-1">
                 {item.isDirectory ? (
                   `📂 FOLDER • ${item.children.length} items`
                 ) : (
@@ -631,7 +666,7 @@ const handleDelete = async (id: number) => {
               ) ? (
                 <button
                   onClick={() => previewImageDirect(item.path)}
-                  className="px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  className="btn btn-primary btn-sm"
                 >
                   View Image
                 </button>
@@ -639,7 +674,7 @@ const handleDelete = async (id: number) => {
                 // Show Preview button for non-image files
                 <button
                   onClick={() => previewFileContent(item.path)}
-                  className="px-3 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                  className="btn btn-secondary btn-sm"
                 >
                   Preview
                 </button>
@@ -647,9 +682,13 @@ const handleDelete = async (id: number) => {
               <button
                 onClick={() => downloadFile(item.path)}
                 disabled={downloadingFile === item.path}
-                className="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-400 transition-colors"
+                className="btn btn-accent btn-sm"
               >
-                {downloadingFile === item.path ? 'Downloading...' : 'Download'}
+                {downloadingFile === item.path ? (
+                  <span className="loading loading-spinner loading-xs"></span>
+                ) : (
+                  'Download'
+                )}
               </button>
             </div>
           )}
@@ -657,7 +696,7 @@ const handleDelete = async (id: number) => {
         
         {/* Render children recursively for expanded directories */}
         {item.isDirectory && expandedFolders.has(item.path) && item.children.length > 0 && (
-          <div className="mt-2 border-l-2 border-blue-200 ml-4">
+          <div className="mt-2 border-l-2 border-primary/30 ml-4">
             {renderFileStructure(item.children, depth + 1)}
           </div>
         )}
@@ -700,7 +739,7 @@ const handleDelete = async (id: number) => {
     <div className="flex space-x-2">
       <button
         onClick={() => handleEdit(tableName, row)}
-        className="px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+        className="btn btn-primary btn-xs"
       >
         Edit
       </button>
@@ -710,543 +749,745 @@ const handleDelete = async (id: number) => {
             handleDelete(row.id);
           }
         }}
-        className="px-3 py-1 text-xs font-medium bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+        className="btn btn-error btn-xs"
       >
         Delete
       </button>
     </div>
   );
 
+  // Toggle theme
+  const toggleTheme = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light');
+  };
+
+  // Render current section content
+  const renderSectionContent = () => {
+    const totalFiles = countTotalFiles(storeFiles);
+    const totalFolders = countTotalFolders(storeFiles);
+
+    switch (currentSection) {
+      case 'dashboard':
+        return (
+          <div className="p-8 space-y-6">
+            <div className="flex justify-between items-center">
+              <h1 className="text-3xl font-bold">Dashboard Overview</h1>
+              <div className="text-sm text-base-content/70">
+                Welcome back, {currentUser?.name}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title text-primary">Total Users</h2>
+                  <p className="text-3xl font-bold">{allUsers.length}</p>
+                </div>
+              </div>
+              
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title text-success">Active Users</h2>
+                  <p className="text-3xl font-bold">{allUsers.filter(u => !u.suspended).length}</p>
+                </div>
+              </div>
+
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title text-warning">Suspended</h2>
+                  <p className="text-3xl font-bold">{allUsers.filter(u => u.suspended).length}</p>
+                </div>
+              </div>
+
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title text-info">Admin Users</h2>
+                  <p className="text-3xl font-bold">{allUsers.filter(u => u.admin).length}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <h2 className="card-title">Quick Actions</h2>
+                <div className="flex flex-wrap gap-4">
+                  <button 
+                    onClick={() => setCurrentSection('users')}
+                    className="btn btn-primary"
+                  >
+                    Manage Users
+                  </button>
+                  <button 
+                    onClick={() => setCurrentSection('files')}
+                    className="btn btn-secondary"
+                  >
+                    File Explorer
+                  </button>
+                  <button 
+                    onClick={() => setCurrentSection('database')}
+                    className="btn btn-accent"
+                  >
+                    Database Tables
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'users':
+        return (
+          <div className="p-8 space-y-6">
+            <div className="flex justify-between items-center">
+              <h1 className="text-3xl font-bold">Users Management</h1>
+              <div className="badge badge-lg badge-primary">
+                {filteredUsers.length} users
+              </div>
+            </div>
+
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <div className="max-w-md">
+                  <label className="label">
+                    <span className="label-text font-semibold">Search Users</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, phone..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="input input-bordered w-full"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <div className="overflow-x-auto">
+                  <table className="table table-zebra">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Surname</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Admin</th>
+                        <th>Status</th>
+                        <th>Subscription</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.length > 0 ? filteredUsers.map(u => (
+                        <tr key={u.id} className="hover">
+                          <td className="font-mono">{u.id}</td>
+                          <td className="font-semibold">{u.name}</td>
+                          <td>{u.surname}</td>
+                          <td>{u.username}</td>
+                          <td>{u.email}</td>
+                          <td>{u.phone_number}</td>
+                          <td>
+                            <div className={`badge ${u.admin ? 'badge-success' : 'badge-ghost'}`}>
+                              {u.admin ? "Yes" : "No"}
+                            </div>
+                          </td>
+                          <td>
+                            <div className={`badge ${u.suspended ? 'badge-error' : 'badge-success'}`}>
+                              {u.suspended ? "Suspended" : "Active"}
+                            </div>
+                          </td>
+                          <td>
+                            <div className={`badge ${u.active_subscription ? 'badge-success' : 'badge-error'}`}>
+                              {u.active_subscription ? "Active" : "Inactive"}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="flex space-x-2">
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => setSelectedUserId(u.id)}
+                              >
+                                View Data
+                              </button>
+                              {!u.admin && (
+                                <>
+                                  {u.suspended ? (
+                                    <button
+                                      onClick={() => openActionModal('unsuspend', u.id, `${u.name} ${u.surname}`)}
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Unsuspend
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => openActionModal('suspend', u.id, `${u.name} ${u.surname}`)}
+                                      className="btn btn-warning btn-sm"
+                                    >
+                                      Suspend
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => openActionModal('delete', u.id, `${u.name} ${u.surname}`)}
+                                    className="btn btn-error btn-sm"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={10} className="text-center py-8 text-base-content/70">
+                            No users found matching your search
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Selected User Data Section */}
+            {selectedUserId && (
+              <div className="space-y-6">
+                {/* Controls */}
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    <div className="flex flex-wrap gap-4 items-center justify-between">
+                      <div>
+                        <h2 className="card-title text-2xl">
+                          User Data: {selectedUserId}
+                        </h2>
+                        <p className="text-base-content/70 text-sm mt-1">
+                          Store files and database tables for selected user
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          onClick={refreshFiles}
+                          disabled={loadingFiles}
+                          className="btn btn-ghost"
+                        >
+                          {loadingFiles ? (
+                            <span className="loading loading-spinner loading-sm"></span>
+                          ) : (
+                            'Refresh Files'
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setShowTables(!showTables)}
+                          className="btn btn-secondary"
+                        >
+                          {showTables ? 'Hide Tables' : 'Show Tables'}
+                        </button>
+                        <button
+                          onClick={fetchSubordinateWorkers}
+                          disabled={loadingSubordinates}
+                          className="btn btn-accent"
+                        >
+                          {loadingSubordinates ? (
+                            <span className="loading loading-spinner loading-sm"></span>
+                          ) : (
+                            'View Subordinate Workers'
+                          )}
+                        </button>
+                        <button
+                          onClick={exportEverything}
+                          disabled={exporting}
+                          className="btn btn-primary"
+                        >
+                          {exporting ? (
+                            <span className="loading loading-spinner loading-sm"></span>
+                          ) : (
+                            'Export All as ZIP'
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Subordinate Workers Section */}
+                {showSubordinateWorkers && (
+                  <div className="card bg-base-100 shadow-xl">
+                    <div className="card-body">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="card-title text-xl">
+                          Subordinate Workers ({subordinateWorkers.length})
+                        </h3>
+                        <button
+                          onClick={() => setShowSubordinateWorkers(false)}
+                          className="btn btn-ghost btn-circle"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {subordinateWorkers.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="table table-zebra">
+                            <thead>
+                              <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Surname</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Role</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {subordinateWorkers.map(worker => (
+                                <tr key={worker.id} className="hover">
+                                  <td className="py-3 px-4 text-sm">{worker.id}</td>
+                                  <td className="py-3 px-4 text-sm font-semibold">{worker.name}</td>
+                                  <td className="py-3 px-4 text-sm">{worker.surname}</td>
+                                  <td className="py-3 px-4 text-sm">{worker.email}</td>
+                                  <td className="py-3 px-4 text-sm">{worker.phone_number}</td>
+                                  <td className="py-3 px-4 text-sm">{worker.role}</td>
+                                  <td className="py-3 px-4 text-sm">
+                                    {new Date(worker.created_at).toLocaleDateString()}
+                                  </td>
+                                  <td className="py-3 px-4 text-sm">
+                                    {renderTableActions('subordinateworkers', worker)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-base-content/70">
+                          No subordinate workers found for this user
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Store Files */}
+                {showTables && (
+                  <div className="card bg-base-100 shadow-xl">
+                    <div className="card-body">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="card-title text-xl">Store Files</h3>
+                        <span className="text-sm text-base-content/70">
+                          {totalFiles} files • {totalFolders} folders
+                        </span>
+                      </div>
+                      {loadingFiles ? (
+                        <div className="text-center py-8">
+                          <span className="loading loading-spinner loading-lg text-primary"></span>
+                          <p className="text-base-content/70 mt-2">Loading files...</p>
+                        </div>
+                      ) : storeFiles.length > 0 ? (
+                        <div className="space-y-2">
+                          {renderFileStructure(storeFiles)}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-base-content/70">
+                          No files found in user's store folder
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tenant Tables */}
+                {showTables && (
+                  <div className="card bg-base-100 shadow-xl">
+                    <div className="card-body">
+                      <h3 className="card-title text-xl mb-4">Database Tables</h3>
+                      <div className="space-y-8">
+                        {Object.keys(tenantData).map(tableName => (
+                          <div key={tableName} className="border rounded-lg overflow-hidden">
+                            <div className="bg-base-200 px-4 py-3 border-b">
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <h4 className="font-semibold capitalize">
+                                    {tableName === "subordinateworkers" ? "Subordinate Workers" : tableName}
+                                  </h4>
+                                  <p className="text-sm text-base-content/70">
+                                    {tenantData[tableName]?.length || 0} rows, {tenantColumns[tableName]?.length || 0} columns
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleAddNew(tableName)}
+                                  className="btn btn-success btn-sm"
+                                >
+                                  Add New
+                                </button>
+                              </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="table table-zebra">
+                                <thead>
+                                  <tr>
+                                    {tenantColumns[tableName]?.map(col => (
+                                      <th key={col} className="text-xs font-medium uppercase">
+                                        {col}
+                                      </th>
+                                    ))}
+                                    <th className="text-xs font-medium uppercase">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {tenantData[tableName]?.length > 0 ? tenantData[tableName].map((row, idx) => (
+                                    <tr key={idx} className="hover">
+                                      {tenantColumns[tableName]?.map((col, i) => (
+                                        <td key={i} className="text-sm max-w-xs">
+                                          {row[col] !== null && row[col] !== undefined ? (
+                                            typeof row[col] === 'object' ? (
+                                              <pre className="text-xs whitespace-pre-wrap">
+                                                {formatJSON(row[col])}
+                                              </pre>
+                                            ) : (
+                                              String(row[col])
+                                            )
+                                          ) : 'NULL'}
+                                        </td>
+                                      ))}
+                                      <td className="text-sm">
+                                        {renderTableActions(tableName, row)}
+                                      </td>
+                                    </tr>
+                                  )) : (
+                                    <tr>
+                                      <td colSpan={(tenantColumns[tableName]?.length || 0) + 1} className="text-center py-4 text-base-content/70">
+                                        No data found in this table
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'files':
+        return (
+          <div className="p-8">
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <h2 className="card-title text-2xl">File Explorer</h2>
+                <p>Select a user from the Users section to view their files.</p>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'database':
+        return (
+          <div className="p-8">
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <h2 className="card-title text-2xl">Database Tables</h2>
+                <p>Select a user from the Users section to view their database tables.</p>
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return (
+          <div className="p-8">
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <h2 className="card-title">Section Not Found</h2>
+                <p>Please select a valid section from the sidebar.</p>
+              </div>
+            </div>
+          </div>
+        );
+    }
+  };
+
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
+      <div className="min-h-screen bg-base-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="loading-spinner mx-auto mb-4"></div>
+          <p className="text-base-content/70 text-lg">Loading Admin Dashboard...</p>
+        </div>
       </div>
     );
   }
 
-  const totalFiles = countTotalFiles(storeFiles);
-  const totalFolders = countTotalFolders(storeFiles);
-
   return (
-    <div className="p-8 bg-gray-100 min-h-screen space-y-8">
-      {/* File Preview Modal */}
-      {previewFile && (
-        <div className="fixed inset-0 bg-black/10 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-xl">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">
-                Preview: {previewFile.name}
-                {previewFile.type === 'image' && previewFile.size && (
-                  <span className="text-sm text-gray-500 ml-2">
-                    ({fileUtils.formatFileSize(previewFile.size)})
-                  </span>
-                )}
-              </h3>
-              <button
-                onClick={closePreview}
-                className="text-gray-500 hover:text-gray-700 text-lg font-bold hover:bg-gray-100 rounded-full w-7 h-7 flex items-center justify-center transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-auto p-4">
-              {previewFile.type === 'image' ? (
-                // Image preview
-                <div className="flex items-center justify-center h-full">
-                  {previewFile.data ? (
-                    <div className="max-w-full max-h-full flex items-center justify-center">
-                      <img 
-                        src={previewFile.data} 
-                        alt={previewFile.name}
-                        className="max-w-full max-h-full object-contain"
-                        onError={(e) => {
-                          console.error('Failed to load image');
-                          const container = e.currentTarget.parentElement;
-                          if (container) {
-                            container.innerHTML = `
-                              <div class="text-center text-red-600 p-8">
-                                <div class="text-4xl mb-4">❌</div>
-                                <p>Failed to load image</p>
-                                <p class="text-sm text-gray-500 mt-2">The image may be corrupted or in an unsupported format</p>
-                              </div>
-                            `;
-                          }
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-center text-gray-500 p-8">
-                      <div className="text-4xl mb-4">🖼️</div>
-                      <p>Image data not available</p>
-                      <p className="text-sm text-gray-500 mt-2">Try downloading the file instead</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                // Text preview
-                <pre className="whitespace-pre-wrap p-6 text-sm overflow-auto h-full font-mono bg-gray-50 rounded-lg">
-                  {previewFile.content}
-                </pre>
-              )}
-            </div>
-            
-            <div className="p-4 border-t border-gray-200 flex justify-end space-x-2">
-              <button
-                onClick={() => downloadFile(previewFile.name)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
-              >
-                Download File
-              </button>
-              <button
-                onClick={closePreview}
-                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
-              >
-                Close
-              </button>
+    <div data-theme={theme} className="flex min-h-screen">
+      {/* Sidebar */}
+      <div className="w-64 min-h-screen bg-base-200 border-r border-base-300 flex flex-col">
+        {/* Logo & Header */}
+        <div className="p-6 border-b border-base-300">
+          <div className="flex items-center space-x-3">
+            <img 
+              src="logo-withoutbackground.png" 
+              className="w-10 h-10" 
+              alt="Admin Logo" 
+            />
+            <div>
+              <h1 className="text-xl font-bold text-base-content">KapryGest</h1>
+              <p className="text-sm text-base-content/70">Admin Panel</p>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Action Confirmation Modal */}
-      {showActionModal && selectedAction && (
-        <div className="fixed inset-0 bg-black/10 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md flex flex-col shadow-xl">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">
-                {selectedAction.type === 'suspend' && 'Suspend User'}
-                {selectedAction.type === 'unsuspend' && 'Unsuspend User'}
-                {selectedAction.type === 'delete' && 'Delete User'}
-              </h3>
-              <button
-                onClick={closeActionModal}
-                className="text-gray-500 hover:text-gray-700 text-lg font-bold hover:bg-gray-100 rounded-full w-7 h-7 flex items-center justify-center transition-colors"
-                disabled={performingAction}
-              >
-                ✕
-              </button>
+        {/* User Info */}
+        <div className="p-4 border-b border-base-300">
+          <div className="flex items-center space-x-3">
+            <div className="avatar placeholder">
+              <div className="bg-primary text-primary-content rounded-full w-10">
+                <span className="text-sm">
+                  {currentUser?.name?.charAt(0) || 'A'}
+                </span>
+              </div>
             </div>
-            <div className="p-4">
-              <p className="text-gray-700 mb-4">
-                {selectedAction.type === 'suspend' && `Are you sure you want to suspend ${selectedAction.userName}? They will not be able to access the system.`}
-                {selectedAction.type === 'unsuspend' && `Are you sure you want to unsuspend ${selectedAction.userName}?`}
-                {selectedAction.type === 'delete' && `WARNING: This will permanently delete ${selectedAction.userName} and all their data. This action cannot be undone.`}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-base-content truncate">
+                {currentUser?.name || 'Admin'}
               </p>
-              <div className="mb-4">
-                <label htmlFor="actionPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                  Security Password
-                </label>
-                <input
-                  id="actionPassword"
-                  type="password"
-                  value={actionPassword}
-                  onChange={(e) => setActionPassword(e.target.value)}
-                  placeholder="Enter security password..."
-                  className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  disabled={performingAction}
-                />
-              </div>
-              {actionError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-700 text-sm">{actionError}</p>
-                </div>
-              )}
-            </div>
-            <div className="p-4 border-t border-gray-200 flex justify-end space-x-2">
-              <button
-                onClick={closeActionModal}
-                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
-                disabled={performingAction}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={performUserAction}
-                disabled={!actionPassword.trim() || performingAction}
-                className={`px-4 py-2 rounded transition-colors ${
-                  selectedAction.type === 'delete' 
-                    ? 'bg-red-600 hover:bg-red-700 text-white' 
-                    : 'bg-orange-600 hover:bg-orange-700 text-white'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {performingAction ? (
-                  <span className="flex items-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Processing...
-                  </span>
-                ) : (
-                  selectedAction.type === 'suspend' ? 'Suspend User' :
-                  selectedAction.type === 'unsuspend' ? 'Unsuspend User' : 'Delete User'
-                )}
-              </button>
+              <p className="text-xs text-base-content/70 truncate">
+                {currentUser?.email || 'admin@kaprygest.com'}
+              </p>
             </div>
           </div>
         </div>
-      )}
 
-      {/* CRUD Modal */}
-      <CrudModal
-        isOpen={crudModalOpen}
-        onClose={() => setCrudModalOpen(false)}
-        onSave={handleSave}
-        onDelete={handleDelete}
-        tableName={selectedTable}
-        fields={tableConfigs[selectedTable]?.fields || []}
-        initialData={editingData}
-        loading={crudLoading}
-        allowDelete={!!editingData?.id}
-      />
+        {/* Navigation Menu */}
+        <nav className="flex-1 p-4 overflow-y-auto">
+          <ul className="space-y-2">
+            {menuSections.map((section) => (
+              <li key={section.id}>
+                <button
+                  onClick={() => setCurrentSection(section.id)}
+                  className={`w-full text-left p-3 rounded-lg transition-all duration-200 flex items-center space-x-3 ${
+                    currentSection === section.id
+                      ? 'bg-primary text-primary-content shadow-lg'
+                      : 'text-base-content hover:bg-base-300 hover:text-base-content'
+                  }`}
+                >
+                  <span className="text-lg">{section.icon}</span>
+                  <span className="font-medium">{section.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-      <img src="logo-withoutbackground.png" className="w-60 mb-[-80px] mt-[-100px]"/>
-      
-      {/* Header */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
-        <p className="text-gray-600 mt-2">Welcome back, {currentUser.name}!</p>
-      </div>
+        {/* Theme Toggle & Footer */}
+        <div className="p-4 border-t border-base-300 space-y-4">
+          {/* Theme Toggle */}
+          <div className="flex items-center justify-between p-3 bg-base-300 rounded-lg">
+            <span className="text-sm text-base-content">Theme</span>
+            <label className="swap swap-rotate">
+              <input 
+                type="checkbox" 
+                checked={theme === 'dark'}
+                onChange={toggleTheme}
+              />
+              {/* Sun icon for light mode */}
+              <div className="swap-on">🌙</div>
+              {/* Moon icon for dark mode */}
+              <div className="swap-off">☀️</div>
+            </label>
+          </div>
 
-      {/* Search */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="max-w-md">
-          <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
-            Search Users
-          </label>
-          <input
-            id="search"
-            type="text"
-            placeholder="Search by name, email, phone..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+          {/* Logout Button */}
+          <button 
+            onClick={() => window.location.href = '/logout'}
+            className="w-full btn btn-outline btn-error btn-sm"
+          >
+            🚪 Logout
+          </button>
         </div>
       </div>
 
-      {/* Users Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b">
-          <h2 className="text-xl font-semibold text-gray-800">Users ({filteredUsers.length})</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Surname</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admin</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subscription</th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.length > 0 ? filteredUsers.map(u => (
-                <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="py-3 px-4 text-sm text-gray-900">{u.id}</td>
-                  <td className="py-3 px-4 text-sm text-gray-900">{u.name}</td>
-                  <td className="py-3 px-4 text-sm text-gray-900">{u.surname}</td>
-                  <td className="py-3 px-4 text-sm text-gray-900">{u.username}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{u.email}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{u.phone_number}</td>
-                  <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      u.admin ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {u.admin ? "Yes" : "No"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      u.suspended ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                    }`}>
-                      {u.suspended ? "Suspended" : "Active"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      u.active_subscription ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {u.active_subscription ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex space-x-2">
-                      <button
-                        className="px-3 py-1 text-xs font-medium bg-gray-800 text-white rounded hover:bg-gray-700 transition-colors"
-                        onClick={() => setSelectedUserId(u.id)}
-                      >
-                        View Data
-                      </button>
-                      {!u.admin && (
-                        <>
-                          {u.suspended ? (
-                            <button
-                              onClick={() => openActionModal('unsuspend', u.id, `${u.name} ${u.surname}`)}
-                              className="px-3 py-1 text-xs font-medium bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors"
-                            >
-                              Unsuspend
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => openActionModal('suspend', u.id, `${u.name} ${u.surname}`)}
-                              className="px-3 py-1 text-xs font-medium bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
-                            >
-                              Suspend
-                            </button>
-                          )}
-                          <button
-                            onClick={() => openActionModal('delete', u.id, `${u.name} ${u.surname}`)}
-                            className="px-3 py-1 text-xs font-medium bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={10} className="py-8 px-4 text-center text-gray-500">
-                    No users found matching your search
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Selected User Data Section */}
-      {selectedUserId && (
-        <div className="space-y-6">
-          {/* Controls */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex flex-wrap gap-4 items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-800">
-                  User Data: {selectedUserId}
-                </h2>
-                <p className="text-gray-600 text-sm mt-1">
-                  Store files and database tables for selected user
-                </p>
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto bg-base-100">
+        {/* Modals */}
+        {showActionModal && selectedAction && (
+          <div className="modal modal-open">
+            <div className="modal-box">
+              <div className="flex justify-between items-center pb-4 border-b border-base-300">
+                <h3 className="text-lg font-semibold">
+                  {selectedAction.type === 'suspend' && 'Suspend User'}
+                  {selectedAction.type === 'unsuspend' && 'Unsuspend User'}
+                  {selectedAction.type === 'delete' && 'Delete User'}
+                </h3>
+                <button
+                  onClick={closeActionModal}
+                  className="btn btn-ghost btn-circle"
+                  disabled={performingAction}
+                >
+                  ✕
+                </button>
               </div>
-              <div className="flex flex-wrap gap-3">
+              <div className="py-4">
+                <p className="mb-4">
+                  {selectedAction.type === 'suspend' && `Are you sure you want to suspend ${selectedAction.userName}? They will not be able to access the system.`}
+                  {selectedAction.type === 'unsuspend' && `Are you sure you want to unsuspend ${selectedAction.userName}?`}
+                  {selectedAction.type === 'delete' && `WARNING: This will permanently delete ${selectedAction.userName} and all their data. This action cannot be undone.`}
+                </p>
+                <div className="form-control mb-4">
+                  <label className="label">
+                    <span className="label-text font-semibold">Security Password</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={actionPassword}
+                    onChange={(e) => setActionPassword(e.target.value)}
+                    placeholder="Enter security password..."
+                    className="input input-bordered w-full"
+                    disabled={performingAction}
+                  />
+                </div>
+                {actionError && (
+                  <div className="alert alert-error mb-4">
+                    <span>{actionError}</span>
+                  </div>
+                )}
+              </div>
+              <div className="modal-action">
                 <button
-                  onClick={refreshFiles}
-                  disabled={loadingFiles}
-                  className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 transition-colors"
+                  onClick={closeActionModal}
+                  className="btn btn-ghost"
+                  disabled={performingAction}
                 >
-                  {loadingFiles ? 'Refreshing...' : 'Refresh Files'}
+                  Cancel
                 </button>
                 <button
-                  onClick={() => setShowTables(!showTables)}
-                  className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  onClick={performUserAction}
+                  disabled={!actionPassword.trim() || performingAction}
+                  className={`btn ${
+                    selectedAction.type === 'delete' 
+                      ? 'btn-error' 
+                      : selectedAction.type === 'suspend'
+                      ? 'btn-warning'
+                      : 'btn-success'
+                  }`}
                 >
-                  {showTables ? 'Hide Tables' : 'Show Tables'}
-                </button>
-                <button
-                  onClick={fetchSubordinateWorkers}
-                  disabled={loadingSubordinates}
-                  className="px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-purple-400 transition-colors"
-                >
-                  {loadingSubordinates ? 'Loading...' : 'View Subordinate Workers'}
-                </button>
-                <button
-                  onClick={exportEverything}
-                  disabled={exporting}
-                  className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-400 transition-colors flex items-center gap-2"
-                >
-                  {exporting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Exporting...
-                    </>
+                  {performingAction ? (
+                    <span className="flex items-center">
+                      <span className="loading loading-spinner loading-sm mr-2"></span>
+                      Processing...
+                    </span>
                   ) : (
-                    'Export All as ZIP'
+                    selectedAction.type === 'suspend' ? 'Suspend User' :
+                    selectedAction.type === 'unsuspend' ? 'Unsuspend User' : 'Delete User'
                   )}
                 </button>
               </div>
             </div>
           </div>
+        )}
 
-          {/* Subordinate Workers Section */}
-          {showSubordinateWorkers && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    Subordinate Workers ({subordinateWorkers.length})
-                  </h3>
-                  <button
-                    onClick={() => setShowSubordinateWorkers(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ✕
-                  </button>
-                </div>
+        {previewFile && (
+          <div className="modal modal-open">
+            <div className="modal-box max-w-6xl h-[90vh] flex flex-col">
+              <div className="flex justify-between items-center pb-4 border-b border-base-300">
+                <h3 className="text-lg font-semibold">
+                  Preview: {previewFile.name}
+                  {previewFile.type === 'image' && previewFile.size && (
+                    <span className="text-sm opacity-70 ml-2">
+                      ({fileUtils.formatFileSize(previewFile.size)})
+                    </span>
+                  )}
+                </h3>
+                <button
+                  onClick={closePreview}
+                  className="btn btn-ghost btn-circle"
+                >
+                  ✕
+                </button>
               </div>
-              <div className="p-6">
-                {subordinateWorkers.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Surname</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {subordinateWorkers.map(worker => (
-                          <tr key={worker.id} className="hover:bg-gray-50">
-                            <td className="py-3 px-4 text-sm text-gray-900">{worker.id}</td>
-                            <td className="py-3 px-4 text-sm text-gray-900">{worker.name}</td>
-                            <td className="py-3 px-4 text-sm text-gray-900">{worker.surname}</td>
-                            <td className="py-3 px-4 text-sm text-gray-600">{worker.email}</td>
-                            <td className="py-3 px-4 text-sm text-gray-600">{worker.phone_number}</td>
-                            <td className="py-3 px-4 text-sm text-gray-600">{worker.role}</td>
-                            <td className="py-3 px-4 text-sm text-gray-500">
-                              {new Date(worker.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="py-3 px-4 text-sm">
-                              {renderTableActions('subordinateworkers', worker)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    No subordinate workers found for this user
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Store Files */}
-          {showTables && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    Store Files
-                  </h3>
-                  <span className="text-sm text-gray-500">
-                    {totalFiles} files • {totalFolders} folders
-                  </span>
-                </div>
-              </div>
-              <div className="p-6">
-                {loadingFiles ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="text-gray-500 mt-2">Loading files...</p>
-                  </div>
-                ) : storeFiles.length > 0 ? (
-                  <div className="space-y-2">
-                    {renderFileStructure(storeFiles)}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    No files found in user's store folder
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Tenant Tables */}
-          {showTables && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b">
-                <h3 className="text-lg font-semibold text-gray-800">Database Tables</h3>
-              </div>
-              <div className="p-6 space-y-8">
-                {Object.keys(tenantData).map(tableName => (
-                  <div key={tableName} className="border rounded-lg overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-3 border-b">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h4 className="font-semibold text-gray-800 capitalize">
-                            {tableName === "subordinateworkers" ? "Subordinate Workers" : tableName}
-                          </h4>
-                          <p className="text-sm text-gray-600">
-                            {tenantData[tableName]?.length || 0} rows, {tenantColumns[tableName]?.length || 0} columns
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleAddNew(tableName)}
-                          className="px-3 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                        >
-                          Add New
-                        </button>
+              
+              <div className="flex-1 overflow-auto py-4">
+                {previewFile.type === 'image' ? (
+                  <div className="flex items-center justify-center h-full">
+                    {previewFile.data ? (
+                      <div className="max-w-full max-h-full flex items-center justify-center">
+                        <img 
+                          src={previewFile.data} 
+                          alt={previewFile.name}
+                          className="max-w-full max-h-full object-contain"
+                          onError={(e) => {
+                            console.error('Failed to load image');
+                            const container = e.currentTarget.parentElement;
+                            if (container) {
+                              container.innerHTML = `
+                                <div class="text-center text-error p-8">
+                                  <div class="text-4xl mb-4">❌</div>
+                                  <p>Failed to load image</p>
+                                  <p class="text-sm opacity-70 mt-2">The image may be corrupted or in an unsupported format</p>
+                                </div>
+                              `;
+                            }
+                          }}
+                        />
                       </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            {tenantColumns[tableName]?.map(col => (
-                              <th key={col} className="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                                {col}
-                              </th>
-                            ))}
-                            <th className="py-2 px-4 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {tenantData[tableName]?.length > 0 ? tenantData[tableName].map((row, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                              {tenantColumns[tableName]?.map((col, i) => (
-                                <td key={i} className="py-2 px-4 text-sm text-gray-900 max-w-xs">
-                                  {row[col] !== null && row[col] !== undefined ? (
-                                    typeof row[col] === 'object' ? (
-                                      <pre className="text-xs text-gray-600 whitespace-pre-wrap">
-                                        {formatJSON(row[col])}
-                                      </pre>
-                                    ) : (
-                                      String(row[col])
-                                    )
-                                  ) : 'NULL'}
-                                </td>
-                              ))}
-                              <td className="py-2 px-4 text-sm">
-                                {renderTableActions(tableName, row)}
-                              </td>
-                            </tr>
-                          )) : (
-                            <tr>
-                              <td colSpan={(tenantColumns[tableName]?.length || 0) + 1} className="py-4 px-4 text-center text-gray-500">
-                                No data found in this table
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                    ) : (
+                      <div className="text-center opacity-70 p-8">
+                        <div className="text-4xl mb-4">🖼️</div>
+                        <p>Image data not available</p>
+                        <p className="text-sm mt-2">Try downloading the file instead</p>
+                      </div>
+                    )}
                   </div>
-                ))}
+                ) : (
+                  <pre className="whitespace-pre-wrap p-6 text-sm overflow-auto h-full font-mono bg-base-300 rounded-lg">
+                    {previewFile.content}
+                  </pre>
+                )}
+              </div>
+              
+              <div className="pt-4 border-t border-base-300 flex justify-end space-x-2">
+                <button
+                  onClick={() => downloadFile(previewFile.name)}
+                  className="btn btn-primary"
+                >
+                  Download File
+                </button>
+                <button
+                  onClick={closePreview}
+                  className="btn btn-ghost"
+                >
+                  Close
+                </button>
               </div>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+
+        <CrudModal
+          isOpen={crudModalOpen}
+          onClose={() => setCrudModalOpen(false)}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          tableName={selectedTable}
+          fields={tableConfigs[selectedTable]?.fields || []}
+          initialData={editingData}
+          loading={crudLoading}
+          allowDelete={!!editingData?.id}
+        />
+
+        {/* Section Content */}
+        {renderSectionContent()}
+      </div>
     </div>
   );
 }
