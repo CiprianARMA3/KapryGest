@@ -76,30 +76,35 @@ export default function AdminPage() {
 
   // Table configurations for all tables
 // Table configurations for all tables with complete required fields
+// Updated table configurations with proper required fields
 const tableConfigs: Record<string, { fields: TableField[] }> = {
   customers: {
     fields: [
+      { name: 'id', type: 'number', label: 'ID', required: true, placeholder: 'ID' },
       { name: 'name', type: 'text', label: 'First Name', required: true, placeholder: 'Enter first name' },
       { name: 'surname', type: 'text', label: 'Last Name', required: true, placeholder: 'Enter last name' },
       { name: 'email', type: 'email', label: 'Email', required: true, placeholder: 'Enter email address' },
-      { name: 'phone_number', type: 'text', label: 'Phone Number', placeholder: 'Enter phone number' },
-      { name: 'billing_address', type: 'textarea', label: 'Billing Address', placeholder: 'Enter billing address' }
+      { name: 'phone_number', type: 'text', label: 'Phone Number', required: false, placeholder: 'Enter phone number' },
+      { name: 'billing_address', type: 'textarea', label: 'Billing Address', required: false, placeholder: 'Enter billing address' }
     ]
   },
   products: {
     fields: [
+      { name: 'id', type: 'number', label: 'ID', required: true, placeholder: 'ID' },
       { name: 'name', type: 'text', label: 'Product Name', required: true, placeholder: 'Enter product name' },
       { name: 'category', type: 'text', label: 'Category', required: true, placeholder: 'Enter category' },
       { name: 'price', type: 'number', label: 'Price', required: true, placeholder: '0.00' },
-      { name: 'reduced_percentage', type: 'number', label: 'Discount %', placeholder: '0' },
-      { name: 'description', type: 'textarea', label: 'Description', placeholder: 'Enter product description' },
-      { name: 'data', type: 'textarea', label: 'Additional Data (JSON)', placeholder: 'Enter additional data as JSON' }
+      { name: 'reduced_percentage', type: 'number', label: 'Discount %', required: false, placeholder: '0' },
+      { name: 'description', type: 'textarea', label: 'Description', required: false, placeholder: 'Enter product description' },
+      { name: 'data', type: 'textarea', label: 'Additional Data (JSON)', required: false, placeholder: 'Enter additional data as JSON' }
     ]
   },
   orders: {
     fields: [
+      { name: 'id', type: 'number', label: 'ID', required: true, placeholder: 'ID' },
       { name: 'product_id', type: 'number', label: 'Product ID', required: true, placeholder: 'Enter product ID' },
       { name: 'quantity', type: 'number', label: 'Quantity', required: true, placeholder: 'Enter quantity' },
+      { name: 'TVA', type: 'number', label: 'TVA', required: false, placeholder: 'Enter TVA' },
       { name: 'total', type: 'number', label: 'Total Amount', required: true, placeholder: 'Enter total amount' },
       { name: 'status', type: 'select', label: 'Status', required: true, 
         options: [
@@ -109,20 +114,26 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
           { value: 'cancelled', label: 'Cancelled' }
         ]
       },
-      { name: 'TVA', type: 'number', label: 'TVA', placeholder: 'Enter TVA' },
-      { name: 'data_invoices', type: 'textarea', label: 'Invoice Data (JSON)', placeholder: 'Enter invoice data as JSON' }
+      { name: 'created_at', type: 'date', label: 'Created At', required: false, placeholder: 'Select creation date' },
+      { name: 'data_invoices', type: 'textarea', label: 'Invoice Data (JSON)', required: false, placeholder: 'Enter invoice data as JSON' }
     ]
   },
   stocks: {
     fields: [
+      { name: 'id', type: 'number', label: 'ID', required: true, placeholder: 'ID' },
       { name: 'product_id', type: 'number', label: 'Product ID', required: true, placeholder: 'Enter product ID' },
+      { name: 'product_name', type: 'text', label: 'Product Name', required: false, placeholder: 'Enter product name' },
       { name: 'quantity', type: 'number', label: 'Quantity', required: true, placeholder: 'Enter quantity' },
-      { name: 'location', type: 'text', label: 'Location', placeholder: 'Enter storage location' },
-      { name: 'minimum_stock', type: 'number', label: 'Minimum Stock', placeholder: 'Enter minimum stock level' }
+      { name: 'amount', type: 'number', label: 'Amount', required: false, placeholder: 'Enter amount' },
+      { name: 'location', type: 'text', label: 'Location', required: false, placeholder: 'Enter storage location' },
+      { name: 'minimum_stock', type: 'number', label: 'Minimum Stock', required: false, placeholder: 'Enter minimum stock level' },
+      { name: 'purchased_date', type: 'date', label: 'Purchased Date', required: false, placeholder: 'Select purchased date' },
+      { name: 'expiry_date', type: 'date', label: 'Expiry Date', required: false, placeholder: 'Select expiry date' }
     ]
   },
   invoices: {
     fields: [
+      { name: 'id', type: 'number', label: 'ID', required: true, placeholder: 'ID' },
       { name: 'order_id', type: 'number', label: 'Order ID', required: true, placeholder: 'Enter order ID' },
       { name: 'total_amount', type: 'number', label: 'Total Amount', required: true, placeholder: 'Enter total amount' },
       { name: 'status', type: 'select', label: 'Status', required: true,
@@ -133,15 +144,18 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
           { value: 'cancelled', label: 'Cancelled' }
         ]
       },
-      { name: 'customer_id', type: 'number', label: 'Customer ID', placeholder: 'Enter customer ID' },
-      { name: 'issue_date', type: 'date', label: 'Issue Date', placeholder: 'Select issue date' },
-      { name: 'due_date', type: 'date', label: 'Due Date', placeholder: 'Select due date' }
+      { name: 'customer_id', type: 'number', label: 'Customer ID', required: false, placeholder: 'Enter customer ID' },
+      { name: 'issue_date', type: 'date', label: 'Issue Date', required: false, placeholder: 'Select issue date' },
+      { name: 'due_date', type: 'date', label: 'Due Date', required: false, placeholder: 'Select due date' },
+      { name: 'date', type: 'date', label: 'Date', required: false, placeholder: 'Select date' },
+      { name: 'data_invoices', type: 'textarea', label: 'Invoice Data (JSON)', required: false, placeholder: 'Enter invoice data as JSON' }
     ]
   },
   paymentlogs: {
     fields: [
+      { name: 'id', type: 'number', label: 'ID', required: true, placeholder: 'ID' },
       { name: 'invoice_id', type: 'number', label: 'Invoice ID', required: true, placeholder: 'Enter invoice ID' },
-      { name: 'amount', type: 'number', label: 'Amount', required: true, placeholder: 'Enter payment amount' },
+      { name: 'invoice_date', type: 'date', label: 'Invoice Date', required: false, placeholder: 'Select invoice date' },
       { name: 'status', type: 'select', label: 'Status', required: true,
         options: [
           { value: 'completed', label: 'Completed' },
@@ -150,6 +164,7 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
           { value: 'refunded', label: 'Refunded' }
         ]
       },
+      { name: 'payment_date', type: 'date', label: 'Payment Date', required: false, placeholder: 'Select payment date' },
       { name: 'payment_method', type: 'select', label: 'Payment Method', required: true,
         options: [
           { value: 'credit_card', label: 'Credit Card' },
@@ -158,19 +173,29 @@ const tableConfigs: Record<string, { fields: TableField[] }> = {
           { value: 'paypal', label: 'PayPal' }
         ]
       },
-      { name: 'transaction_id', type: 'text', label: 'Transaction ID', placeholder: 'Enter transaction ID' }
+      { name: 'payment_type', type: 'text', label: 'Payment Type', required: false, placeholder: 'Enter payment type' },
+      { name: 'price', type: 'number', label: 'Price', required: false, placeholder: 'Enter price' },
+      { name: 'amount', type: 'number', label: 'Amount', required: true, placeholder: 'Enter payment amount' },
+      { name: 'billing_address', type: 'textarea', label: 'Billing Address', required: false, placeholder: 'Enter billing address' },
+      { name: 'phone_number', type: 'text', label: 'Phone Number', required: false, placeholder: 'Enter phone number' },
+      { name: 'transaction_id', type: 'text', label: 'Transaction ID', required: false, placeholder: 'Enter transaction ID' },
+      { name: 'data_invoices', type: 'textarea', label: 'Invoice Data (JSON)', required: false, placeholder: 'Enter invoice data as JSON' }
     ]
   },
   subordinateworkers: {
     fields: [
+      { name: 'id', type: 'number', label: 'ID', required: true, placeholder: 'ID' },
       { name: 'name', type: 'text', label: 'First Name', required: true, placeholder: 'Enter first name' },
       { name: 'surname', type: 'text', label: 'Last Name', required: true, placeholder: 'Enter last name' },
       { name: 'email', type: 'email', label: 'Email', required: true, placeholder: 'Enter email address' },
       { name: 'phone_number', type: 'text', label: 'Phone Number', required: true, placeholder: 'Enter phone number' },
       { name: 'role', type: 'text', label: 'Role', required: true, placeholder: 'Enter role' },
       { name: 'password', type: 'password', label: 'Password', required: true, placeholder: 'Enter password' },
-      { name: 'permissions', type: 'textarea', label: 'Permissions (JSON)', placeholder: 'Enter permissions as JSON' },
-      { name: 'logs', type: 'textarea', label: 'Logs (JSON)', placeholder: 'Enter logs as JSON' }
+      { name: 'permissions', type: 'textarea', label: 'Permissions (JSON)', required: false, placeholder: 'Enter permissions as JSON' },
+      { name: 'logs', type: 'textarea', label: 'Logs (JSON)', required: false, placeholder: 'Enter logs as JSON' },
+      // { name: 'user_id', type: 'number', label: 'User ID', required: false, placeholder: 'Enter user ID' },
+      { name: 'is_active', type: 'text', label: 'Is Active', required: false, placeholder: 'Enter active status (true/false)' },
+      { name: 'created_at', type: 'date', label: 'Created At', required: false, placeholder: 'Select creation date' }
     ]
   }
 };
@@ -328,26 +353,46 @@ const handleSave = async (data: any) => {
   try {
     const isEditing = editingData && editingData.id;
     
-    // Process the data before sending - handle JSON fields
+    // Process the data before sending - handle empty values and JSON fields
     const processedData = { ...data };
+    
+    // Convert empty strings to null for non-required fields
+    const requiredFields = tableConfigs[selectedTable]?.fields
+      .filter(field => field.required)
+      .map(field => field.name) || [];
+    
+    Object.keys(processedData).forEach(key => {
+      // If it's not a required field and value is empty string, set to null
+      if (!requiredFields.includes(key) && processedData[key] === '') {
+        processedData[key] = null;
+      }
+    });
     
     // Process JSON fields
     const jsonFields = ['data', 'data_invoices', 'permissions', 'logs'];
     jsonFields.forEach(field => {
-      if (processedData[field] && typeof processedData[field] === 'string') {
+      if (processedData[field] && typeof processedData[field] === 'string' && processedData[field].trim() !== '') {
         try {
           processedData[field] = JSON.parse(processedData[field]);
         } catch (error) {
           console.warn(`Failed to parse ${field} as JSON, keeping as string`);
+          // If JSON parsing fails, keep it as string or set to null if empty
+          if (processedData[field].trim() === '') {
+            processedData[field] = null;
+          }
         }
+      } else if (processedData[field] === '') {
+        processedData[field] = null;
       }
     });
 
-    // Handle numeric fields
+    // Handle numeric fields - convert empty strings to null
     const numericFields = ['product_id', 'quantity', 'price', 'total', 'TVA', 'total_amount', 'amount', 'minimum_stock', 'reduced_percentage'];
     numericFields.forEach(field => {
-      if (processedData[field] !== undefined && processedData[field] !== null) {
+      if (processedData[field] !== undefined && processedData[field] !== null && processedData[field] !== '') {
         processedData[field] = Number(processedData[field]);
+      } else if (processedData[field] === '') {
+        processedData[field] = null;
       }
     });
 
@@ -1250,13 +1295,6 @@ const handleSave = async (data: any) => {
         {/* User Info */}
         <div className="p-4 border-b border-base-300">
           <div className="flex items-center space-x-3">
-            <div className="avatar placeholder">
-              <div className="bg-primary text-primary-content rounded-full w-10">
-                <span className="text-sm">
-                  {currentUser?.name?.charAt(0) || 'A'}
-                </span>
-              </div>
-            </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-base-content truncate">
                 {currentUser?.name || 'Admin'}

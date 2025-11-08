@@ -44,7 +44,9 @@ const CrudModal: React.FC<CrudModalProps> = ({
     if (isOpen) {
       const initialFormData: any = {};
       fields.forEach(field => {
-        initialFormData[field.name] = initialData[field.name] || '';
+        // Handle null/undefined values by setting to empty string
+        const value = initialData[field.name];
+        initialFormData[field.name] = value !== null && value !== undefined ? value : '';
       });
       setFormData(initialFormData);
       setErrors({});
@@ -70,10 +72,16 @@ const CrudModal: React.FC<CrudModalProps> = ({
     const newErrors: Record<string, string> = {};
     
     fields.forEach(field => {
-      if (field.required && (!formData[field.name] || formData[field.name] === '')) {
-        newErrors[field.name] = `${field.label} is required`;
+      // Only validate required fields that are actually in the form
+      if (field.required) {
+        const value = formData[field.name];
+        // Check for empty string, null, or undefined
+        if (value === '' || value === null || value === undefined) {
+          newErrors[field.name] = `${field.label} is required`;
+        }
       }
       
+      // Email validation
       if (field.type === 'email' && formData[field.name]) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData[field.name])) {
@@ -81,7 +89,8 @@ const CrudModal: React.FC<CrudModalProps> = ({
         }
       }
       
-      if (field.type === 'number' && formData[field.name]) {
+      // Number validation - allow empty for non-required fields
+      if (field.type === 'number' && formData[field.name] && formData[field.name] !== '') {
         if (isNaN(Number(formData[field.name]))) {
           newErrors[field.name] = 'Please enter a valid number';
         }
@@ -100,7 +109,15 @@ const CrudModal: React.FC<CrudModalProps> = ({
     }
     
     try {
-      await onSave(formData);
+      // Process form data before saving - convert empty strings to null for non-required fields
+      const processedData = { ...formData };
+      fields.forEach(field => {
+        if (!field.required && processedData[field.name] === '') {
+          processedData[field.name] = null;
+        }
+      });
+      
+      await onSave(processedData);
       onClose();
     } catch (error) {
       console.error('Error saving data:', error);
@@ -120,17 +137,19 @@ const CrudModal: React.FC<CrudModalProps> = ({
   };
 
   const renderField = (field: TableField) => {
+    const value = formData[field.name] || '';
+    
     const commonProps = {
       id: field.name,
       name: field.name,
-      value: formData[field.name] || '',
+      value: value,
       onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => 
         handleInputChange(field.name, e.target.value),
       className: `w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
         errors[field.name] ? 'border-red-500 bg-red-50' : 'border-gray-300'
       }`,
       required: field.required,
-      placeholder: field.placeholder
+      placeholder: field.placeholder || `Enter ${field.label.toLowerCase()}`
     };
 
     switch (field.type) {
@@ -197,7 +216,8 @@ const CrudModal: React.FC<CrudModalProps> = ({
   return (
     <>
       {/* Main Modal */}
-<div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">        <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-800">
               {isEditing ? 'Edit' : 'Add New'} {tableName}
