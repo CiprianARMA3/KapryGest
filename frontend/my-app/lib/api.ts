@@ -489,35 +489,82 @@ export const filesAPI = {
 };
 
 // View Files API methods (New file system operations)
+// View Files API methods (New file system operations)
 export const viewFilesAPI = {
-  // File System Operations
-  getFolderStructure: (basePath?: string, relativePath?: string) => 
-    apiClient.get<FolderStructure>(`/viewfiles/structure?basePath=${encodeURIComponent(basePath || '')}&relativePath=${encodeURIComponent(relativePath || '')}`),
+  // File System Operations - UPDATED: removed basePath
+  getFolderStructure: (relativePath?: string) => 
+    apiClient.get<FolderStructure>(`/viewfiles/structure?relativePath=${encodeURIComponent(relativePath || '')}`),
   
-  getFilePreview: (filePath: string, basePath?: string, maxSize?: number) => 
-    apiClient.get<FileSystemContent>(`/viewfiles/preview?filePath=${encodeURIComponent(filePath)}&basePath=${encodeURIComponent(basePath || '')}&maxSize=${maxSize || 10485760}`),
+  getFilePreview: (filePath: string, maxSize?: number) => 
+    apiClient.get<FileSystemContent>(`/viewfiles/preview?filePath=${encodeURIComponent(filePath)}&maxSize=${maxSize || 10485760}`),
   
-  createItem: (basePath: string, itemPath: string, type: 'file' | 'directory', content?: string) => 
-    apiClient.post<{ message: string; path: string }>('/viewfiles/create', { basePath, path: itemPath, type, content }),
+  createItem: (itemPath: string, type: 'file' | 'directory', content?: string) => 
+    apiClient.post<{ message: string; path: string }>('/viewfiles/create', { path: itemPath, type, content }),
   
-  updateFile: (basePath: string, filePath: string, content: string) => 
-    apiClient.put<{ message: string; path: string; size: number; modified: Date }>('/viewfiles/update', { basePath, path: filePath, content }),
+  updateFile: (filePath: string, content: string) => 
+    apiClient.put<{ message: string; path: string; size: number; modified: Date }>('/viewfiles/update', { path: filePath, content }),
   
-  renameItem: (basePath: string, oldPath: string, newPath: string) => 
-    apiClient.put<{ message: string; oldPath: string; newPath: string }>('/viewfiles/rename', { basePath, oldPath, newPath }),
+  renameItem: (oldPath: string, newPath: string) => 
+    apiClient.put<{ message: string; oldPath: string; newPath: string }>('/viewfiles/rename', { oldPath, newPath }),
   
-  deleteItem: (basePath: string, itemPath: string, recursive?: boolean) => 
+  deleteItem: (itemPath: string, recursive?: boolean) => 
     apiClient.delete<{ message: string; path: string }>('/viewfiles/delete', { 
-      basePath, 
-      path: itemPath, 
-      recursive: recursive || false 
+      body: JSON.stringify({ path: itemPath, recursive: recursive || false }) 
     }),
 
-  copyItem: (basePath: string, sourcePath: string, destinationPath: string) => 
-    apiClient.post<{ message: string; sourcePath: string; destinationPath: string }>('/viewfiles/copy', { basePath, sourcePath, destinationPath }),
+  copyItem: (sourcePath: string, destinationPath: string) => 
+    apiClient.post<{ message: string; sourcePath: string; destinationPath: string }>('/viewfiles/copy', { sourcePath, destinationPath }),
   
-  moveItem: (basePath: string, sourcePath: string, destinationPath: string) => 
-    apiClient.post<{ message: string; sourcePath: string; destinationPath: string }>('/viewfiles/move', { basePath, sourcePath, destinationPath }),
+  moveItem: (sourcePath: string, destinationPath: string) => 
+    apiClient.post<{ message: string; sourcePath: string; destinationPath: string }>('/viewfiles/move', { sourcePath, destinationPath }),
+  
+  uploadFile: async (currentPath: string, file: File): Promise<{ message: string; path: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('currentPath', currentPath);
+
+    const url = `${API_BASE_URL}/viewfiles/upload`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Upload multiple files
+  uploadFiles: async (currentPath: string, files: FileList | File[]): Promise<{ message: string; paths: string[] }> => {
+    const formData = new FormData();
+    
+    // Append all files
+    Array.from(files).forEach(file => {
+      formData.append('files', file);
+    });
+    
+    formData.append('currentPath', currentPath);
+
+    const url = `${API_BASE_URL}/viewfiles/upload-multiple`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
 };
 
 // Admin API methods

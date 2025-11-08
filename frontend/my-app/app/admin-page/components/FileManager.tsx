@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { viewFilesAPI, fileSystemUtils } from '../../../lib/api';
 
 interface FileManagerProps {
-  basePath?: string;
+  // basePath removed since backend handles user-specific paths
 }
 
-const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) => {
+const FileManager: React.FC<FileManagerProps> = () => {
   const [currentPath, setCurrentPath] = useState<string>('');
   const [files, setFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -22,13 +22,16 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
   const [showRenameModal, setShowRenameModal] = useState<boolean>(false);
   const [itemToRename, setItemToRename] = useState<any>(null);
   const [newName, setNewName] = useState<string>('');
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
+  const [uploadFiles, setUploadFiles] = useState<FileList | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  // Load folder structure
+  // Load folder structure - UPDATED: removed basePath
   const loadFolder = async (path: string = '') => {
     setLoading(true);
     setError('');
     try {
-      const structure = await viewFilesAPI.getFolderStructure(basePath, path);
+      const structure = await viewFilesAPI.getFolderStructure(path);
       setFiles(structure.items);
       setCurrentPath(structure.path);
     } catch (err: any) {
@@ -40,7 +43,7 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
 
   useEffect(() => {
     loadFolder();
-  }, [basePath]);
+  }, []);
 
   // Navigate to folder
   const navigateToFolder = (folderPath: string) => {
@@ -53,12 +56,12 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
     loadFolder(parentPath);
   };
 
-  // Preview file
+  // Preview file - UPDATED: removed basePath
   const previewFile = async (file: any) => {
     setLoading(true);
     setError('');
     try {
-      const content = await viewFilesAPI.getFilePreview(file.path, basePath);
+      const content = await viewFilesAPI.getFilePreview(file.path);
       setSelectedFile(file);
       setFileContent(content.content);
       setIsEditing(false);
@@ -69,14 +72,14 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
     }
   };
 
-  // Save file content
+  // Save file content - UPDATED: removed basePath
   const saveFile = async () => {
     if (!selectedFile) return;
     
     setLoading(true);
     setError('');
     try {
-      await viewFilesAPI.updateFile(basePath, selectedFile.path, fileContent);
+      await viewFilesAPI.updateFile(selectedFile.path, fileContent);
       setIsEditing(false);
       setSuccess('File saved successfully!');
       setTimeout(() => setSuccess(''), 3000);
@@ -87,14 +90,14 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
     }
   };
 
-  // Create new item
+  // Create new item - UPDATED: removed basePath
   const createItem = async () => {
     if (!newItemName.trim()) return;
     
     setLoading(true);
     setError('');
     try {
-      await viewFilesAPI.createItem(basePath, `${currentPath}/${newItemName}`, newItemType);
+      await viewFilesAPI.createItem(`${currentPath}/${newItemName}`, newItemType);
       setShowCreateModal(false);
       setNewItemName('');
       loadFolder(currentPath);
@@ -107,14 +110,14 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
     }
   };
 
-  // Delete item
+  // Delete item - UPDATED: removed basePath
   const deleteItem = async () => {
     if (!itemToDelete) return;
     
     setLoading(true);
     setError('');
     try {
-      await viewFilesAPI.deleteItem(basePath, itemToDelete.path, itemToDelete.isDirectory);
+      await viewFilesAPI.deleteItem(itemToDelete.path, itemToDelete.isDirectory);
       if (selectedFile?.path === itemToDelete.path) {
         setSelectedFile(null);
         setFileContent('');
@@ -131,15 +134,14 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
     }
   };
 
-  // Rename item
+  // Rename item - UPDATED: removed basePath and simplified
   const renameItem = async () => {
     if (!itemToRename || !newName.trim() || newName === itemToRename.name) return;
     
     setLoading(true);
     setError('');
     try {
-      const newPath = `${currentPath.split('/').slice(0, -1).join('/')}/${newName}`;
-      await viewFilesAPI.renameItem(basePath, itemToRename.path, newPath);
+      await viewFilesAPI.renameItem(itemToRename.path, newName);
       setShowRenameModal(false);
       setItemToRename(null);
       setNewName('');
@@ -150,6 +152,54 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
       setError(err.message || 'Failed to rename item');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Upload files - UPDATED: removed basePath
+  const handleUpload = async () => {
+    if (!uploadFiles || uploadFiles.length === 0) return;
+
+    setIsUploading(true);
+    setError('');
+
+    try {
+      if (uploadFiles.length === 1) {
+        await viewFilesAPI.uploadFile(currentPath, uploadFiles[0]);
+        setSuccess('File uploaded successfully!');
+      } else {
+        await viewFilesAPI.uploadFiles(currentPath, uploadFiles);
+        setSuccess(`${uploadFiles.length} files uploaded successfully!`);
+      }
+
+      setShowUploadModal(false);
+      setUploadFiles(null);
+      loadFolder(currentPath);
+      setTimeout(() => setSuccess(''), 3000);
+      
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload files');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Handle file selection for upload
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setUploadFiles(e.target.files);
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setUploadFiles(e.dataTransfer.files);
+      setShowUploadModal(true);
     }
   };
 
@@ -172,14 +222,14 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 p-4 bg-base-200 rounded-lg">
         <div>
           <h1 className="text-4xl font-bold text-base-content">File Manager</h1>
-          <div className="text-m breadcrumbs">
+          <div className="text-sm breadcrumbs">
             <ul>
               <li>
                 <button 
                   onClick={() => loadFolder('')}
                   className="text-primary hover:text-primary-focus"
                 >
-                  Root "Store path"
+                  Root
                 </button>
               </li>
               {currentPath.split('/').map((part, index, array) => (
@@ -199,6 +249,17 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
         </div>
         
         <div className="flex flex-wrap gap-2">
+          {/* Upload Button */}
+          <button 
+            onClick={() => setShowUploadModal(true)}
+            className="btn btn-primary btn-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload
+          </button>
+          
           <button 
             onClick={() => setShowCreateModal(true)}
             className="btn btn-primary btn-sm"
@@ -249,10 +310,10 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* File List */}
-        <div className="card bg-base-100 shadow-xl">
+      {/* Main Content - Wider layout */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* File List - takes 2/3 of space */}
+        <div className="card bg-base-100 shadow-xl xl:col-span-2">
           <div className="card-body">
             <h2 className="card-title">
               Files & Folders
@@ -260,7 +321,7 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
             </h2>
             
             <div className="overflow-x-auto">
-              <table className="table table-zebra table-m">
+              <table className="table table-zebra table-lg w-full">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -289,10 +350,10 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
                           )}
                         </div>
                       </td>
-                      <td className="text-m text-base-content/70">
+                      <td className="text-sm text-base-content/70">
                         {fileSystemUtils.formatFileSize(file.size)}
                       </td>
-                      <td className="text-m text-base-content/70">
+                      <td className="text-sm text-base-content/70">
                         {fileSystemUtils.formatDate(file.modified)}
                       </td>
                       <td>
@@ -344,10 +405,10 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
           </div>
         </div>
 
-        {/* File Preview/Editor */}
+        {/* File Preview/Editor - takes 1/3 of space */}
         {selectedFile && (
           <div className="card bg-base-100 shadow-xl">
-            <div className="card-body mt-[200px]">
+            <div className="card-body">
               <div className="flex justify-between items-start mb-4">
                 <h2 className="card-title">{selectedFile.name}</h2>
                 <div className="flex gap-2">
@@ -458,6 +519,103 @@ const FileManager: React.FC<FileManagerProps> = ({ basePath = process.cwd() }) =
             <button 
               onClick={() => setShowCreateModal(false)}
               className="btn btn-ghost"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Upload Modal */}
+      <div className={`modal ${showUploadModal ? 'modal-open' : ''}`}>
+        <div className="modal-box">
+          <h3 className="font-bold text-lg">Upload Files</h3>
+          
+          <div className="py-4 space-y-4">
+            {/* Drag and drop area */}
+            <div 
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                uploadFiles ? 'border-primary bg-primary/10' : 'border-base-300 hover:border-primary'
+              }`}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('file-input')?.click()}
+            >
+              <svg className="w-12 h-12 mx-auto text-base-content/50 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              
+              <p className="text-lg font-medium mb-2">
+                {uploadFiles ? `${uploadFiles.length} file(s) selected` : 'Drop files here or click to browse'}
+              </p>
+              <p className="text-sm text-base-content/60">
+                Supports single or multiple files
+              </p>
+              
+              {/* Hidden file input */}
+              <input
+                id="file-input"
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </div>
+
+            {/* Selected files list */}
+            {uploadFiles && (
+              <div className="max-h-40 overflow-y-auto">
+                <h4 className="font-medium mb-2">Selected Files:</h4>
+                <ul className="space-y-1">
+                  {Array.from(uploadFiles).map((file, index) => (
+                    <li key={index} className="text-sm flex justify-between items-center p-2 bg-base-200 rounded">
+                      <span className="truncate flex-1">{file.name}</span>
+                      <span className="text-xs text-base-content/60 ml-2">
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Upload progress */}
+            {isUploading && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Uploading...</span>
+                </div>
+                <progress 
+                  className="progress progress-primary w-full" 
+                  value="100" 
+                  max="100"
+                ></progress>
+              </div>
+            )}
+          </div>
+
+          <div className="modal-action">
+            <button 
+              onClick={handleUpload}
+              disabled={!uploadFiles || uploadFiles.length === 0 || isUploading}
+              className="btn btn-primary"
+            >
+              {isUploading ? (
+                <>
+                  <span className="loading loading-spinner loading-sm"></span>
+                  Uploading...
+                </>
+              ) : (
+                'Upload Files'
+              )}
+            </button>
+            <button 
+              onClick={() => {
+                setShowUploadModal(false);
+                setUploadFiles(null);
+              }}
+              className="btn btn-ghost"
+              disabled={isUploading}
             >
               Cancel
             </button>

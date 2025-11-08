@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
-import { authenticateToken, isAdmin } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
+import multer from 'multer';
 
 const router = Router();
 
@@ -26,6 +27,10 @@ interface FileContent {
   size: number;
   encoding?: string;
 }
+
+const getUserStorePath = (userId: number, relativePath: string = ''): string => {
+  return path.join('/home/cipriankali/Desktop/KapryGest/backend/db/store', userId.toString(), relativePath);
+};
 
 // Helper function to check if path is safe
 const isSafePath = (basePath: string, targetPath: string): boolean => {
@@ -71,41 +76,87 @@ const readFileContent = async (filePath: string): Promise<{ content: string; enc
   }
 };
 
-// Get folder structure
+// Configure multer for file uploads - UPDATED FOR USER STORE
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    try {
+      // Get user ID from authenticated request
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return cb(new Error('User not authenticated'), '');
+      }
+
+      const { currentPath = '' } = req.body;
+      const storePath = getUserStorePath(userId, currentPath);
+      
+      // Ensure directory exists
+      await fs.mkdir(storePath, { recursive: true });
+      
+      console.log('💾 Storing file for user', userId, 'in:', storePath);
+      cb(null, storePath);
+    } catch (error) {
+      cb(error as Error, '');
+    }
+  },
+  filename: (req, file, cb) => {
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    cb(null, sanitizedName);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+  }
+});
+
+// Get folder structure - UPDATED FOR USER STORE
 router.get('/structure', authenticateToken, async (req, res) => {
   try {
-    const { basePath = process.cwd(), relativePath = '' } = req.query;
-    
-    if (typeof basePath !== 'string' || typeof relativePath !== 'string') {
+    const userId = (req as any).user?.id;
+    const { relativePath = '' } = req.query;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (typeof relativePath !== 'string') {
       return res.status(400).json({ error: 'Invalid path parameters' });
     }
 
-    // Security check - ensure we're not accessing unsafe paths
-    if (!isSafePath(process.cwd(), basePath)) {
-      return res.status(403).json({ error: 'Access to this path is not allowed' });
-    }
-
-    const fullPath = path.join(basePath, relativePath);
+    const storePath = getUserStorePath(userId, relativePath);
     
+    console.log('📁 Loading folder structure for user', userId, 'from:', storePath);
+
     // Check if path exists and is accessible
     try {
-      await fs.access(fullPath);
+      await fs.access(storePath);
     } catch (error) {
-      return res.status(404).json({ error: 'Path not found or inaccessible' });
+      // If path doesn't exist, create it and return empty
+      await fs.mkdir(storePath, { recursive: true });
+      return res.json({
+        path: relativePath,
+        basePath: getUserStorePath(userId),
+        items: [],
+        totalItems: 0,
+        totalDirectories: 0,
+        totalFiles: 0
+      });
     }
 
-    const stats = await fs.stat(fullPath);
+    const stats = await fs.stat(storePath);
     
     if (!stats.isDirectory()) {
       return res.status(400).json({ error: 'Path is not a directory' });
     }
 
-    const items = await fs.readdir(fullPath);
+    const items = await fs.readdir(storePath);
     const fileSystemItems: FileSystemItem[] = [];
 
     for (const item of items) {
       try {
-        const itemPath = path.join(fullPath, item);
+        const itemPath = path.join(storePath, item);
         const itemStats = await fs.stat(itemPath);
         
         const fileItem: FileSystemItem = {
@@ -116,23 +167,6 @@ router.get('/structure', authenticateToken, async (req, res) => {
           size: itemStats.size,
           modified: itemStats.mtime
         };
-
-        // If it's a directory, get immediate children count (optional)
-        if (itemStats.isDirectory()) {
-          try {
-            const children = await fs.readdir(itemPath);
-            fileItem.children = children.slice(0, 10).map(child => ({
-              name: child,
-              path: path.join(relativePath, item, child),
-              isDirectory: false, // We'll set this properly if needed
-              isFile: true,
-              size: 0,
-              modified: new Date()
-            }));
-          } catch (error) {
-            fileItem.children = [];
-          }
-        }
 
         fileSystemItems.push(fileItem);
       } catch (error) {
@@ -150,7 +184,7 @@ router.get('/structure', authenticateToken, async (req, res) => {
 
     res.json({
       path: relativePath,
-      basePath: basePath,
+      basePath: getUserStorePath(userId),
       items: fileSystemItems,
       totalItems: fileSystemItems.length,
       totalDirectories: fileSystemItems.filter(item => item.isDirectory).length,
@@ -163,37 +197,39 @@ router.get('/structure', authenticateToken, async (req, res) => {
   }
 });
 
-// Get file content/preview
+// Get file content/preview - UPDATED FOR USER STORE
 router.get('/preview', authenticateToken, async (req, res) => {
   try {
-    const { filePath, basePath = process.cwd(), maxSize = 10485760 } = req.query; // 10MB default max size
+    const userId = (req as any).user?.id;
+    const { filePath, maxSize = 10485760 } = req.query;
 
-    if (typeof filePath !== 'string' || typeof basePath !== 'string') {
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (typeof filePath !== 'string') {
       return res.status(400).json({ error: 'Invalid file path parameters' });
     }
 
-    // Security check
-    if (!isSafePath(process.cwd(), basePath) || !isSafePath(basePath, filePath)) {
-      return res.status(403).json({ error: 'Access to this file is not allowed' });
-    }
-
-    const fullPath = path.join(basePath, filePath);
+    const storePath = getUserStorePath(userId, filePath);
     
+    console.log('👀 Previewing file for user', userId, 'from:', storePath);
+
     // Check if file exists and is accessible
     try {
-      await fs.access(fullPath);
+      await fs.access(storePath);
     } catch (error) {
       return res.status(404).json({ error: 'File not found or inaccessible' });
     }
 
-    const stats = await fs.stat(fullPath);
+    const stats = await fs.stat(storePath);
     
     if (!stats.isFile()) {
       return res.status(400).json({ error: 'Path is not a file' });
     }
 
     // Check file size limit
-    const maxSizeBytes = typeof maxSize === 'string' ? parseInt(maxSize) : Number(maxSize);
+    const maxSizeBytes = Number(maxSize);
     if (stats.size > maxSizeBytes) {
       return res.status(413).json({ 
         error: `File too large. Maximum size is ${maxSizeBytes} bytes.`,
@@ -202,14 +238,14 @@ router.get('/preview', authenticateToken, async (req, res) => {
       });
     }
 
-    const mimeType = getMimeType(fullPath);
-    const { content, encoding } = await readFileContent(fullPath);
+    const mimeType = getMimeType(storePath);
+    const { content, encoding } = await readFileContent(storePath);
 
     const fileContent: FileContent = {
-      name: path.basename(fullPath),
+      name: path.basename(storePath),
       path: filePath,
       content: content,
-      type: mimeType.split('/')[0], // 'text', 'image', 'application', etc.
+      type: mimeType.split('/')[0],
       mimeType: mimeType,
       size: stats.size,
       encoding: encoding
@@ -223,39 +259,41 @@ router.get('/preview', authenticateToken, async (req, res) => {
   }
 });
 
-// Create new file or directory
+// Create new file or directory - UPDATED FOR USER STORE
 router.post('/create', authenticateToken, async (req, res) => {
   try {
-    const { basePath = process.cwd(), path: itemPath, type = 'file', content = '' } = req.body;
+    const userId = (req as any).user?.id;
+    const { path: itemPath, type = 'file', content = '' } = req.body;
 
-    if (typeof basePath !== 'string' || typeof itemPath !== 'string') {
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (typeof itemPath !== 'string') {
       return res.status(400).json({ error: 'Invalid path parameters' });
     }
 
-    // Security check
-    if (!isSafePath(process.cwd(), basePath) || !isSafePath(basePath, itemPath)) {
-      return res.status(403).json({ error: 'Access to this location is not allowed' });
-    }
+    const storePath = getUserStorePath(userId, itemPath);
 
-    const fullPath = path.join(basePath, itemPath);
+    console.log('🆕 Creating item for user', userId, 'at:', storePath);
 
     // Check if item already exists
     try {
-      await fs.access(fullPath);
+      await fs.access(storePath);
       return res.status(409).json({ error: 'Item already exists' });
     } catch (error) {
       // Item doesn't exist, which is what we want
     }
 
     if (type === 'directory') {
-      await fs.mkdir(fullPath, { recursive: true });
+      await fs.mkdir(storePath, { recursive: true });
       res.json({ message: 'Directory created successfully', path: itemPath });
     } else if (type === 'file') {
       // Ensure parent directory exists
-      const parentDir = path.dirname(fullPath);
+      const parentDir = path.dirname(storePath);
       await fs.mkdir(parentDir, { recursive: true });
       
-      await fs.writeFile(fullPath, content, 'utf-8');
+      await fs.writeFile(storePath, content, 'utf-8');
       res.json({ message: 'File created successfully', path: itemPath });
     } else {
       res.status(400).json({ error: 'Invalid type. Must be "file" or "directory"' });
@@ -267,38 +305,40 @@ router.post('/create', authenticateToken, async (req, res) => {
   }
 });
 
-// Update file content
+// Update file content - UPDATED FOR USER STORE
 router.put('/update', authenticateToken, async (req, res) => {
   try {
-    const { basePath = process.cwd(), path: filePath, content } = req.body;
+    const userId = (req as any).user?.id;
+    const { path: filePath, content } = req.body;
 
-    if (typeof basePath !== 'string' || typeof filePath !== 'string' || content === undefined) {
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (typeof filePath !== 'string' || content === undefined) {
       return res.status(400).json({ error: 'Invalid parameters' });
     }
 
-    // Security check
-    if (!isSafePath(process.cwd(), basePath) || !isSafePath(basePath, filePath)) {
-      return res.status(403).json({ error: 'Access to this file is not allowed' });
-    }
+    const storePath = getUserStorePath(userId, filePath);
 
-    const fullPath = path.join(basePath, filePath);
+    console.log('✏️ Updating file for user', userId, 'at:', storePath);
 
     // Check if file exists and is accessible
     try {
-      await fs.access(fullPath);
+      await fs.access(storePath);
     } catch (error) {
       return res.status(404).json({ error: 'File not found or inaccessible' });
     }
 
-    const stats = await fs.stat(fullPath);
+    const stats = await fs.stat(storePath);
     if (!stats.isFile()) {
       return res.status(400).json({ error: 'Path is not a file' });
     }
 
-    await fs.writeFile(fullPath, content, 'utf-8');
+    await fs.writeFile(storePath, content, 'utf-8');
     
     // Get updated stats
-    const updatedStats = await fs.stat(fullPath);
+    const updatedStats = await fs.stat(storePath);
     
     res.json({ 
       message: 'File updated successfully', 
@@ -313,24 +353,24 @@ router.put('/update', authenticateToken, async (req, res) => {
   }
 });
 
-// Rename file or directory
+// Rename file or directory - UPDATED FOR USER STORE
 router.put('/rename', authenticateToken, async (req, res) => {
   try {
-    const { basePath = process.cwd(), oldPath, newPath } = req.body;
+    const userId = (req as any).user?.id;
+    const { oldPath, newPath } = req.body;
 
-    if (typeof basePath !== 'string' || typeof oldPath !== 'string' || typeof newPath !== 'string') {
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (typeof oldPath !== 'string' || typeof newPath !== 'string') {
       return res.status(400).json({ error: 'Invalid path parameters' });
     }
 
-    // Security check
-    if (!isSafePath(process.cwd(), basePath) || 
-        !isSafePath(basePath, oldPath) || 
-        !isSafePath(basePath, newPath)) {
-      return res.status(403).json({ error: 'Access to these paths is not allowed' });
-    }
+    const fullOldPath = getUserStorePath(userId, oldPath);
+    const fullNewPath = getUserStorePath(userId, newPath);
 
-    const fullOldPath = path.join(basePath, oldPath);
-    const fullNewPath = path.join(basePath, newPath);
+    console.log('🔄 Renaming item for user', userId, 'from:', fullOldPath, 'to:', fullNewPath);
 
     // Check if source exists
     try {
@@ -356,52 +396,48 @@ router.put('/rename', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete file or directory
+// Delete file or directory - UPDATED FOR USER STORE
 router.delete('/delete', authenticateToken, async (req, res) => {
   try {
-    // Get parameters from request body (for DELETE with body)
-    const { basePath = process.cwd(), path: itemPath, recursive = false } = req.body;
+    const userId = (req as any).user?.id;
+    const { path: itemPath, recursive = false } = req.body;
 
-    // OR if using query parameters, use this instead:
-    // const { basePath = process.cwd(), path: itemPath, recursive = false } = req.query;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
 
-    console.log('Delete request:', { basePath, itemPath, recursive }); // Add this for debugging
-
-    if (typeof basePath !== 'string' || typeof itemPath !== 'string') {
+    if (typeof itemPath !== 'string') {
       return res.status(400).json({ error: 'Invalid path parameters' });
     }
 
-    // Security check
-    if (!isSafePath(process.cwd(), basePath) || !isSafePath(basePath, itemPath)) {
-      return res.status(403).json({ error: 'Access to this item is not allowed' });
-    }
+    const storePath = getUserStorePath(userId, itemPath);
 
-    const fullPath = path.join(basePath, itemPath);
+    console.log('🗑️ Deleting item for user', userId, 'from:', storePath);
 
     // Check if item exists
     try {
-      await fs.access(fullPath);
+      await fs.access(storePath);
     } catch (error) {
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    const stats = await fs.stat(fullPath);
+    const stats = await fs.stat(storePath);
 
     if (stats.isDirectory()) {
       if (recursive) {
-        await fs.rm(fullPath, { recursive: true, force: true });
+        await fs.rm(storePath, { recursive: true, force: true });
       } else {
         // Check if directory is empty
-        const items = await fs.readdir(fullPath);
+        const items = await fs.readdir(storePath);
         if (items.length > 0) {
           return res.status(400).json({ 
             error: 'Directory is not empty. Use recursive=true to delete non-empty directories.' 
           });
         }
-        await fs.rmdir(fullPath);
+        await fs.rmdir(storePath);
       }
     } else {
-      await fs.unlink(fullPath);
+      await fs.unlink(storePath);
     }
 
     res.json({ message: 'Item deleted successfully', path: itemPath });
@@ -412,36 +448,88 @@ router.delete('/delete', authenticateToken, async (req, res) => {
   }
 });
 
-// Upload file
-router.post('/upload', authenticateToken, async (req, res) => {
+// Single file upload - UPDATED FOR USER STORE
+router.post('/upload', authenticateToken, upload.single('file'), async (req, res) => {
   try {
-    // Note: For file uploads, you'll need to use multer or similar middleware
-    // This is a simplified version - you might want to implement proper file upload handling
-    res.status(501).json({ error: 'File upload endpoint not implemented. Use multipart/form-data with proper file upload middleware.' });
+    const userId = (req as any).user?.id;
+    const { currentPath = '' } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    console.log('✅ File uploaded for user', userId, 'to:', getUserStorePath(userId, currentPath));
+
+    res.json({
+      message: 'File uploaded successfully',
+      path: path.join(currentPath, req.file.filename),
+      filename: req.file.filename,
+      size: req.file.size
+    });
+
   } catch (error) {
-    console.error('Error handling upload:', error);
-    res.status(500).json({ error: 'Failed to handle upload' });
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
   }
 });
 
-// Copy file or directory
+// Multiple files upload - UPDATED FOR USER STORE
+router.post('/upload-multiple', authenticateToken, upload.array('files', 10), async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { currentPath = '' } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (!req.files || (req.files as Express.Multer.File[]).length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const files = req.files as Express.Multer.File[];
+    const paths = files.map(file => path.join(currentPath, file.filename));
+
+    console.log('✅', files.length, 'files uploaded for user', userId, 'to:', getUserStorePath(userId, currentPath));
+
+    res.json({
+      message: `${files.length} files uploaded successfully`,
+      paths: paths,
+      files: files.map(file => ({
+        filename: file.filename,
+        size: file.size,
+        mimetype: file.mimetype
+      }))
+    });
+
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Failed to upload files' });
+  }
+});
+
+// Copy file or directory - UPDATED FOR USER STORE
 router.post('/copy', authenticateToken, async (req, res) => {
   try {
-    const { basePath = process.cwd(), sourcePath, destinationPath } = req.body;
+    const userId = (req as any).user?.id;
+    const { sourcePath, destinationPath } = req.body;
 
-    if (typeof basePath !== 'string' || typeof sourcePath !== 'string' || typeof destinationPath !== 'string') {
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (typeof sourcePath !== 'string' || typeof destinationPath !== 'string') {
       return res.status(400).json({ error: 'Invalid path parameters' });
     }
 
-    // Security check
-    if (!isSafePath(process.cwd(), basePath) || 
-        !isSafePath(basePath, sourcePath) || 
-        !isSafePath(basePath, destinationPath)) {
-      return res.status(403).json({ error: 'Access to these paths is not allowed' });
-    }
+    const fullSourcePath = getUserStorePath(userId, sourcePath);
+    const fullDestPath = getUserStorePath(userId, destinationPath);
 
-    const fullSourcePath = path.join(basePath, sourcePath);
-    const fullDestPath = path.join(basePath, destinationPath);
+    console.log('📋 Copying item for user', userId, 'from:', fullSourcePath, 'to:', fullDestPath);
 
     // Check if source exists
     try {
@@ -476,24 +564,24 @@ router.post('/copy', authenticateToken, async (req, res) => {
   }
 });
 
-// Move file or directory
+// Move file or directory - UPDATED FOR USER STORE
 router.post('/move', authenticateToken, async (req, res) => {
   try {
-    const { basePath = process.cwd(), sourcePath, destinationPath } = req.body;
+    const userId = (req as any).user?.id;
+    const { sourcePath, destinationPath } = req.body;
 
-    if (typeof basePath !== 'string' || typeof sourcePath !== 'string' || typeof destinationPath !== 'string') {
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (typeof sourcePath !== 'string' || typeof destinationPath !== 'string') {
       return res.status(400).json({ error: 'Invalid path parameters' });
     }
 
-    // Security check
-    if (!isSafePath(process.cwd(), basePath) || 
-        !isSafePath(basePath, sourcePath) || 
-        !isSafePath(basePath, destinationPath)) {
-      return res.status(403).json({ error: 'Access to these paths is not allowed' });
-    }
+    const fullSourcePath = getUserStorePath(userId, sourcePath);
+    const fullDestPath = getUserStorePath(userId, destinationPath);
 
-    const fullSourcePath = path.join(basePath, sourcePath);
-    const fullDestPath = path.join(basePath, destinationPath);
+    console.log('🚚 Moving item for user', userId, 'from:', fullSourcePath, 'to:', fullDestPath);
 
     // Check if source exists
     try {
